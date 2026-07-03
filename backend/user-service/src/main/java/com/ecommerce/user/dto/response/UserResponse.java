@@ -1,6 +1,6 @@
 package com.ecommerce.user.dto.response;
 
-import com.ecommerce.user.entity.enums.Role;
+import com.ecommerce.user.entity.Role;
 import lombok.Builder;
 import lombok.Data;
 
