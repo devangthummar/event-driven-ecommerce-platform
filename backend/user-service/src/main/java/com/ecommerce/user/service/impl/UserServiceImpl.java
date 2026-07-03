@@ -5,6 +5,7 @@ import com.ecommerce.user.dto.response.UserResponse;
 import com.ecommerce.user.entity.Role;
 import com.ecommerce.user.entity.User;
 import com.ecommerce.user.exception.EmailAlreadyExistsException;
+import com.ecommerce.user.mapper.UserMapper;
 import com.ecommerce.user.repository.UserRepository;
 import com.ecommerce.user.service.UserService;
 import lombok.RequiredArgsConstructor;
@@ -21,28 +22,18 @@ public class UserServiceImpl implements UserService {
     @Override
     public UserResponse registerUser(RegisterRequest request) {
 
+
+
         if (userRepository.existsByEmail(request.getEmail())) {
             throw new EmailAlreadyExistsException("Email already exists");
         }
 
-        User user = User.builder()
-                .firstName(request.getFirstName())
-                .lastName(request.getLastName())
-                .email(request.getEmail())
-                .password(passwordEncoder.encode(request.getPassword()))
-                .phoneNumber(request.getPhoneNumber())
-                .role(Role.USER)
-                .build();
+
+        private final UserMapper userMapper;
+        User user = userMapper.toEntity(request, passwordEncoder);
 
         User savedUser = userRepository.save(user);
 
-        return UserResponse.builder()
-                .id(savedUser.getId())
-                .firstName(savedUser.getFirstName())
-                .lastName(savedUser.getLastName())
-                .email(savedUser.getEmail())
-                .phoneNumber(savedUser.getPhoneNumber())
-                .role(savedUser.getRole())
-                .build();
+        return userMapper.toResponse(savedUser);
     }
 }
