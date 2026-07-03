@@ -1,6 +1,8 @@
 package com.ecommerce.user.controller;
 
+import com.ecommerce.user.dto.request.LoginRequest;
 import com.ecommerce.user.dto.request.RegisterRequest;
+import com.ecommerce.user.dto.response.LoginResponse;
 import com.ecommerce.user.dto.response.UserResponse;
 import com.ecommerce.user.service.UserService;
 import jakarta.validation.Valid;
@@ -23,5 +25,14 @@ public class UserController {
         UserResponse response = userService.registerUser(request);
 
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
+    }
+
+
+    @PostMapping("/login")
+    public ResponseEntity<LoginResponse> login(
+            @Valid @RequestBody LoginRequest request){
+
+        return ResponseEntity.ok(userService.login(request));
+
     }
 }
