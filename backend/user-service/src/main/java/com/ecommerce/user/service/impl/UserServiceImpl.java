@@ -9,6 +9,8 @@ import com.ecommerce.user.entity.User;
 import com.ecommerce.user.exception.EmailAlreadyExistsException;
 import com.ecommerce.user.mapper.UserMapper;
 import com.ecommerce.user.repository.UserRepository;
+import com.ecommerce.user.security.CustomUserDetails;
+import com.ecommerce.user.security.JwtService;
 import com.ecommerce.user.service.UserService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.authentication.AuthenticationManager;
@@ -23,6 +25,7 @@ public class UserServiceImpl implements UserService {
 
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
+    private final JwtService jwtService;
 
 
     private final AuthenticationManager authenticationManager;
@@ -55,8 +58,13 @@ public class UserServiceImpl implements UserService {
                         )
                 );
 
+        CustomUserDetails userDetails =
+                (CustomUserDetails) authentication.getPrincipal();
+
+        String token = jwtService.generateToken(userDetails);
+
         return LoginResponse.builder()
-                .accessToken("JWT will be generated in next step")
+                .accessToken(token)
                 .tokenType("Bearer")
                 .build();
 
