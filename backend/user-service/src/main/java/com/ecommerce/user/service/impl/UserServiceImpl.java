@@ -35,7 +35,7 @@ public class UserServiceImpl implements UserService {
 
     private final AuthenticationManager authenticationManager;
     private final UserMapper userMapper;
-    private final PasswordEncoder passwordEncoder;
+
 
     @Override
     public UserResponse registerUser(RegisterRequest request) {
@@ -137,6 +137,13 @@ public class UserServiceImpl implements UserService {
 
             throw new InvalidPasswordException(
                     "Current password is incorrect.");
+        }
+        if (passwordEncoder.matches(
+                request.getNewPassword(),
+                user.getPassword())) {
+
+            throw new InvalidPasswordException(
+                    "New password must be different from the current password.");
         }
 
         user.setPassword(
