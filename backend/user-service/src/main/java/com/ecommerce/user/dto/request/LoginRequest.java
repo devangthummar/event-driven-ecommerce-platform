@@ -2,13 +2,17 @@ package com.ecommerce.user.dto.request;
 
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
-import lombok.Data;
+import lombok.*;
 
-@Data
+@Getter
+@Setter
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
 public class LoginRequest {
 
-    @Email(message = "Invalid email")
     @NotBlank(message = "Email is required")
+    @Email(message = "Enter a valid email")
     private String email;
 
     @NotBlank(message = "Password is required")
