@@ -9,6 +9,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
@@ -34,5 +35,17 @@ public class UserController {
 
         return ResponseEntity.ok(userService.login(request));
 
+    }
+
+    @GetMapping("/user")
+    @PreAuthorize("hasRole('USER')")
+    public ResponseEntity<String> userEndpoint() {
+        return ResponseEntity.ok("Welcome USER");
+    }
+
+    @GetMapping("/admin")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<String> adminEndpoint() {
+        return ResponseEntity.ok("Welcome ADMIN");
     }
 }
