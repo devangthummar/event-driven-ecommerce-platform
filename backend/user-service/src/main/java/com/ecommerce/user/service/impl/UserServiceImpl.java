@@ -1,5 +1,6 @@
 package com.ecommerce.user.service.impl;
 
+import com.ecommerce.user.dto.request.ChangePasswordRequest;
 import com.ecommerce.user.dto.request.LoginRequest;
 import com.ecommerce.user.dto.request.RegisterRequest;
 import com.ecommerce.user.dto.request.UpdateProfileRequest;
@@ -8,6 +9,7 @@ import com.ecommerce.user.dto.response.UserResponse;
 import com.ecommerce.user.entity.Role;
 import com.ecommerce.user.entity.User;
 import com.ecommerce.user.exception.EmailAlreadyExistsException;
+import com.ecommerce.user.exception.InvalidPasswordException;
 import com.ecommerce.user.exception.UserNotFoundException;
 import com.ecommerce.user.mapper.UserMapper;
 import com.ecommerce.user.repository.UserRepository;
@@ -33,6 +35,7 @@ public class UserServiceImpl implements UserService {
 
     private final AuthenticationManager authenticationManager;
     private final UserMapper userMapper;
+    private final PasswordEncoder passwordEncoder;
 
     @Override
     public UserResponse registerUser(RegisterRequest request) {
@@ -111,6 +114,36 @@ public class UserServiceImpl implements UserService {
         User updatedUser = userRepository.save(user);
 
         return userMapper.toResponse(updatedUser);
+
+    }
+
+    @Override
+    public void changePassword(ChangePasswordRequest request) {
+
+        Authentication authentication =
+                SecurityContextHolder.getContext().getAuthentication();
+
+        CustomUserDetails userDetails =
+                (CustomUserDetails) authentication.getPrincipal();
+
+        User user = userRepository
+                .findByEmail(userDetails.getUsername())
+                .orElseThrow(() ->
+                        new UserNotFoundException("User not found."));
+
+        if (!passwordEncoder.matches(
+                request.getCurrentPassword(),
+                user.getPassword())) {
+
+            throw new InvalidPasswordException(
+                    "Current password is incorrect.");
+        }
+
+        user.setPassword(
+                passwordEncoder.encode(
+                        request.getNewPassword()));
+
+        userRepository.save(user);
 
     }
 }

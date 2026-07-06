@@ -1,5 +1,6 @@
 package com.ecommerce.user.controller;
 
+import com.ecommerce.user.dto.request.ChangePasswordRequest;
 import com.ecommerce.user.dto.request.LoginRequest;
 import com.ecommerce.user.dto.request.RegisterRequest;
 import com.ecommerce.user.dto.request.UpdateProfileRequest;
@@ -65,6 +66,17 @@ public class UserController {
 
         return ResponseEntity.ok(
                 userService.updateProfile(request));
+
+    }
+
+    @PutMapping("/change-password")
+    public ResponseEntity<String> changePassword(
+            @Valid
+            @RequestBody ChangePasswordRequest request){
+
+        userService.changePassword(request);
+
+        return ResponseEntity.ok("Password changed successfully.");
 
     }
 }

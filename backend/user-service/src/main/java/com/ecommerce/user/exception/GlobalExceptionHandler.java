@@ -67,4 +67,23 @@ public class GlobalExceptionHandler {
                 .body(error);
 
     }
+
+    @ExceptionHandler(InvalidPasswordException.class)
+    public ResponseEntity<ApiError> handleInvalidPasswordException(
+            InvalidPasswordException ex,
+            HttpServletRequest request){
+
+        ApiError error = ApiError.builder()
+                .timestamp(LocalDateTime.now())
+                .status(HttpStatus.BAD_REQUEST.value())
+                .error(HttpStatus.BAD_REQUEST.getReasonPhrase())
+                .message(ex.getMessage())
+                .path(request.getRequestURI())
+                .build();
+
+        return ResponseEntity
+                .status(HttpStatus.BAD_REQUEST)
+                .body(error);
+
+    }
 }
