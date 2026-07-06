@@ -9,4 +9,5 @@ public interface UserService {
 
     UserResponse registerUser(RegisterRequest request);
     LoginResponse login(LoginRequest request);
+    UserResponse getCurrentUser();
 }

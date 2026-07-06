@@ -48,4 +48,12 @@ public class UserController {
     public ResponseEntity<String> adminEndpoint() {
         return ResponseEntity.ok("Welcome ADMIN");
     }
+
+    @GetMapping("/me")
+    public ResponseEntity<UserResponse> getCurrentUser(){
+
+        return ResponseEntity.ok(
+                userService.getCurrentUser());
+
+    }
 }
