@@ -2,6 +2,7 @@ package com.ecommerce.user.service.impl;
 
 import com.ecommerce.user.dto.request.LoginRequest;
 import com.ecommerce.user.dto.request.RegisterRequest;
+import com.ecommerce.user.dto.request.UpdateProfileRequest;
 import com.ecommerce.user.dto.response.LoginResponse;
 import com.ecommerce.user.dto.response.UserResponse;
 import com.ecommerce.user.entity.Role;
@@ -86,6 +87,30 @@ public class UserServiceImpl implements UserService {
                         new UserNotFoundException("User not found."));
 
         return userMapper.toResponse(user);
+
+    }
+
+    @Override
+    public UserResponse updateProfile(UpdateProfileRequest request) {
+
+        Authentication authentication =
+                SecurityContextHolder.getContext().getAuthentication();
+
+        CustomUserDetails userDetails =
+                (CustomUserDetails) authentication.getPrincipal();
+
+        User user = userRepository
+                .findByEmail(userDetails.getUsername())
+                .orElseThrow(() ->
+                        new UserNotFoundException("User not found."));
+
+        user.setFirstName(request.getFirstName());
+        user.setLastName(request.getLastName());
+        user.setPhoneNumber(request.getPhoneNumber());
+
+        User updatedUser = userRepository.save(user);
+
+        return userMapper.toResponse(updatedUser);
 
     }
 }

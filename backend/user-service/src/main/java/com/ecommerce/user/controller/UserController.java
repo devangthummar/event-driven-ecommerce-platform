@@ -2,6 +2,7 @@ package com.ecommerce.user.controller;
 
 import com.ecommerce.user.dto.request.LoginRequest;
 import com.ecommerce.user.dto.request.RegisterRequest;
+import com.ecommerce.user.dto.request.UpdateProfileRequest;
 import com.ecommerce.user.dto.response.LoginResponse;
 import com.ecommerce.user.dto.response.UserResponse;
 import com.ecommerce.user.service.UserService;
@@ -54,6 +55,16 @@ public class UserController {
 
         return ResponseEntity.ok(
                 userService.getCurrentUser());
+
+    }
+
+    @PutMapping("/profile")
+    public ResponseEntity<UserResponse> updateProfile(
+            @Valid
+            @RequestBody UpdateProfileRequest request){
+
+        return ResponseEntity.ok(
+                userService.updateProfile(request));
 
     }
 }
