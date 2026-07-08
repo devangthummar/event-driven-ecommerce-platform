@@ -1,4 +1,4 @@
-package com.devang.user_service;
+package com.devang.user;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
