@@ -1,0 +1,80 @@
+package com.ecommerce.order.service.impl;
+
+import com.ecommerce.order.dto.request.CreateOrderRequest;
+import com.ecommerce.order.dto.request.OrderItemRequest;
+import com.ecommerce.order.dto.response.OrderResponse;
+import com.ecommerce.order.entity.Order;
+import com.ecommerce.order.entity.OrderItem;
+import com.ecommerce.order.entity.enums.OrderStatus;
+import com.ecommerce.order.mapper.OrderMapper;
+import com.ecommerce.order.repository.OrderRepository;
+import com.ecommerce.order.service.OrderService;
+import lombok.RequiredArgsConstructor;
+import org.springframework.stereotype.Service;
+
+import java.math.BigDecimal;
+import java.time.LocalDateTime;
+import java.util.UUID;
+
+@Service
+@RequiredArgsConstructor
+public class OrderServiceImpl implements OrderService {
+
+    private final OrderRepository orderRepository;
+    private final OrderMapper orderMapper;
+
+
+    @Override
+    public OrderResponse createOrder(CreateOrderRequest request) {
+
+        Order order = new Order();
+
+        order.setUserId(1L);
+
+        order.setOrderNumber(
+                "ORD-" + UUID.randomUUID().toString().substring(0,8)
+        );
+
+        order.setStatus(OrderStatus.PENDING);
+
+        order.setCreatedAt(LocalDateTime.now());
+
+        BigDecimal totalAmount = BigDecimal.ZERO;
+
+        for (OrderItemRequest itemRequest : request.getItems()) {
+
+            OrderItem item = new OrderItem();
+
+            item.setProductId(itemRequest.getProductId());
+
+            item.setQuantity(itemRequest.getQuantity());
+
+        /*
+            Temporary price.
+
+            Later this will come from Product Service.
+        */
+
+            item.setPrice(BigDecimal.valueOf(1000));
+
+            item.setOrder(order);
+
+            order.getOrderItems().add(item);
+
+            totalAmount = totalAmount.add(
+                    item.getPrice().multiply(
+                            BigDecimal.valueOf(item.getQuantity())
+                    )
+            );
+
+        }
+
+        order.setTotalAmount(totalAmount);
+
+        Order savedOrder = orderRepository.save(order);
+
+        return orderMapper.toOrderResponse(savedOrder);
+
+    }
+
+}
