@@ -4,6 +4,8 @@ import com.ecommerce.inventory.dto.request.ReserveStockRequest;
 import com.ecommerce.inventory.dto.request.StockRequest;
 import com.ecommerce.inventory.dto.response.InventoryResponse;
 import com.ecommerce.inventory.entity.Inventory;
+import com.ecommerce.inventory.exception.InsufficientStockException;
+import com.ecommerce.inventory.exception.InventoryAlreadyExistsException;
 import com.ecommerce.inventory.exception.InventoryNotFoundException;
 import com.ecommerce.inventory.mapper.InventoryMapper;
 import com.ecommerce.inventory.repository.InventoryRepository;
@@ -28,7 +30,7 @@ public class InventoryServiceImpl implements InventoryService {
 
         if (inventoryRepository.existsByProductId(request.getProductId())) {
 
-            throw new IllegalArgumentException(
+            throw new InventoryAlreadyExistsException(
                     "Inventory already exists for product."
             );
 
@@ -98,8 +100,8 @@ public class InventoryServiceImpl implements InventoryService {
 
         if (inventory.getAvailableQuantity() < request.getQuantity()) {
 
-            throw new IllegalArgumentException(
-                    "Insufficient stock available."
+            throw new InsufficientStockException(
+                    "Reserved quantity is insufficient."
             );
 
         }
@@ -166,7 +168,7 @@ public class InventoryServiceImpl implements InventoryService {
 
         if (inventory.getReservedQuantity() < request.getQuantity()) {
 
-            throw new IllegalArgumentException(
+            throw new InsufficientStockException(
                     "Reserved quantity is insufficient."
             );
 
