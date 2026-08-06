@@ -6,6 +6,7 @@ import com.ecommerce.inventory.dto.response.InventoryResponse;
 
 public interface InventoryService {
 
+
     InventoryResponse createInventory(StockRequest request);
 
     InventoryResponse getInventory(Long productId);
