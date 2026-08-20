@@ -2,10 +2,12 @@ package com.ecommerce.order.service.impl;
 
 import com.ecommerce.order.dto.request.CreateOrderRequest;
 import com.ecommerce.order.dto.request.OrderItemRequest;
+import com.ecommerce.order.dto.request.UpdateOrderStatusRequest;
 import com.ecommerce.order.dto.response.OrderResponse;
 import com.ecommerce.order.entity.Order;
 import com.ecommerce.order.entity.OrderItem;
 import com.ecommerce.order.entity.enums.OrderStatus;
+import com.ecommerce.order.exception.OrderNotFoundException;
 import com.ecommerce.order.mapper.OrderMapper;
 import com.ecommerce.order.repository.OrderRepository;
 import com.ecommerce.order.service.OrderService;
@@ -14,6 +16,7 @@ import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.UUID;
 
 @Service
@@ -74,6 +77,60 @@ public class OrderServiceImpl implements OrderService {
         Order savedOrder = orderRepository.save(order);
 
         return orderMapper.toOrderResponse(savedOrder);
+
+    }
+
+    @Override
+    public OrderResponse getOrderById(Long id) {
+
+        Order order = orderRepository.findById(id)
+                .orElseThrow(() ->
+                        new OrderNotFoundException(
+                                "Order not found with id: " + id
+                        ));
+
+        return orderMapper.toOrderResponse(order);
+
+    }
+
+    @Override
+    public List<OrderResponse> getOrdersByUserId(Long userId) {
+
+        List<Order> orders = orderRepository.findByUserId(userId);
+
+        return orders.stream()
+                .map(orderMapper::toOrderResponse)
+                .toList();
+
+    }
+
+    @Override
+    public OrderResponse updateOrderStatus(Long id, OrderStatus status) {
+
+        Order order = orderRepository.findById(id)
+                .orElseThrow(() ->
+                        new OrderNotFoundException(
+                                "Order not found with id: " + id
+                        ));
+
+        order.setStatus(status);
+
+        Order updatedOrder = orderRepository.save(order);
+
+        return orderMapper.toOrderResponse(updatedOrder);
+
+    }
+
+    @Override
+    public void deleteOrder(Long id) {
+
+        Order order = orderRepository.findById(id)
+                .orElseThrow(() ->
+                        new OrderNotFoundException(
+                                "Order not found with id: " + id
+                        ));
+
+        orderRepository.delete(order);
 
     }
 
