@@ -7,11 +7,14 @@ import com.ecommerce.order.dto.response.OrderResponse;
 import com.ecommerce.order.entity.Order;
 import com.ecommerce.order.entity.OrderItem;
 import com.ecommerce.order.entity.enums.OrderStatus;
+import com.ecommerce.order.event.OrderCreatedEvent;
 import com.ecommerce.order.exception.OrderNotFoundException;
 import com.ecommerce.order.mapper.OrderMapper;
+import com.ecommerce.order.producer.OrderEventProducer;
 import com.ecommerce.order.repository.OrderRepository;
 import com.ecommerce.order.service.OrderService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -19,12 +22,14 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class OrderServiceImpl implements OrderService {
 
     private final OrderRepository orderRepository;
     private final OrderMapper orderMapper;
+    private final OrderEventProducer orderEventProducer;
 
 
     @Override
@@ -75,6 +80,14 @@ public class OrderServiceImpl implements OrderService {
         order.setTotalAmount(totalAmount);
 
         Order savedOrder = orderRepository.save(order);
+
+        OrderCreatedEvent event = OrderCreatedEvent.of(
+                savedOrder.getId(),
+                savedOrder.getUserId(),
+                savedOrder.getTotalAmount(),
+                savedOrder.getCreatedAt()
+        );
+        orderEventProducer.publishOrderCreatedEvent(event);
 
         return orderMapper.toOrderResponse(savedOrder);
 
