@@ -1,48 +1,67 @@
-import com.ecommerce.inventory.exception.InsufficientStockException;
-import com.ecommerce.inventory.exception.InventoryAlreadyExistsException;
+package com.ecommerce.inventory.exception;
+
 import jakarta.servlet.http.HttpServletRequest;
-import lombok.Builder;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.ErrorResponse;
 import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 import java.time.LocalDateTime;
+import java.util.HashMap;
+import java.util.Map;
 
+@RestControllerAdvice
+public class GlobalExceptionHandler {
 
-@ExceptionHandler(InventoryAlreadyExistsException.class)
-public ResponseEntity<ErrorResponse> handleInventoryAlreadyExistsException(
-        InventoryAlreadyExistsException ex,
-        HttpServletRequest request
-) {
+    @ExceptionHandler(InventoryAlreadyExistsException.class)
+    public ResponseEntity<Map<String, Object>> handleInventoryAlreadyExistsException(
+            InventoryAlreadyExistsException ex,
+            HttpServletRequest request
+    ) {
 
-    ErrorResponse response = ErrorResponse.builder()
-            .timestamp(LocalDateTime.now())
-            .status(HttpStatus.CONFLICT.value())
-            .error(HttpStatus.CONFLICT.getReasonPhrase())
-            .message(ex.getMessage())
-            .path(request.getRequestURI())
-            .build();
+        Map<String, Object> response = new HashMap<>();
+        response.put("timestamp", LocalDateTime.now());
+        response.put("status", HttpStatus.CONFLICT.value());
+        response.put("error", HttpStatus.CONFLICT.getReasonPhrase());
+        response.put("message", ex.getMessage());
+        response.put("path", request.getRequestURI());
 
-    return ResponseEntity.status(HttpStatus.CONFLICT).body(response);
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(response);
+
+    }
+
+    @ExceptionHandler(InsufficientStockException.class)
+    public ResponseEntity<Map<String, Object>> handleInsufficientStockException(
+            InsufficientStockException ex,
+            HttpServletRequest request
+    ) {
+
+        Map<String, Object> response = new HashMap<>();
+        response.put("timestamp", LocalDateTime.now());
+        response.put("status", HttpStatus.BAD_REQUEST.value());
+        response.put("error", HttpStatus.BAD_REQUEST.getReasonPhrase());
+        response.put("message", ex.getMessage());
+        response.put("path", request.getRequestURI());
+
+        return ResponseEntity.badRequest().body(response);
+
+    }
+
+    @ExceptionHandler(InventoryNotFoundException.class)
+    public ResponseEntity<Map<String, Object>> handleInventoryNotFoundException(
+            InventoryNotFoundException ex,
+            HttpServletRequest request
+    ) {
+
+        Map<String, Object> response = new HashMap<>();
+        response.put("timestamp", LocalDateTime.now());
+        response.put("status", HttpStatus.NOT_FOUND.value());
+        response.put("error", HttpStatus.NOT_FOUND.getReasonPhrase());
+        response.put("message", ex.getMessage());
+        response.put("path", request.getRequestURI());
+
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(response);
+
+    }
 
 }
-@ExceptionHandler(InsufficientStockException.class)
-public ResponseEntity<ErrorResponse> handleInsufficientStockException(
-        InsufficientStockException ex,
-        HttpServletRequest request
-) {
-
-    ErrorResponse response = ErrorResponse.builder()
-            .timestamp(LocalDateTime.now())
-            .status(HttpStatus.BAD_REQUEST.value())
-            .error(HttpStatus.BAD_REQUEST.getReasonPhrase())
-            .message(ex.getMessage())
-            .path(request.getRequestURI())
-            .build();
-
-    return ResponseEntity.badRequest().body(response);
-
-}
-
-

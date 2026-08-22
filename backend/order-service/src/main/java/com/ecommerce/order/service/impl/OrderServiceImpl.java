@@ -8,6 +8,7 @@ import com.ecommerce.order.entity.Order;
 import com.ecommerce.order.entity.OrderItem;
 import com.ecommerce.order.entity.enums.OrderStatus;
 import com.ecommerce.order.event.OrderCreatedEvent;
+import com.ecommerce.order.event.OrderEventItem;
 import com.ecommerce.order.exception.OrderNotFoundException;
 import com.ecommerce.order.mapper.OrderMapper;
 import com.ecommerce.order.producer.OrderEventProducer;
@@ -21,6 +22,7 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -81,11 +83,21 @@ public class OrderServiceImpl implements OrderService {
 
         Order savedOrder = orderRepository.save(order);
 
+        List<OrderEventItem> eventItems = savedOrder.getOrderItems()
+                .stream()
+                .map(item -> OrderEventItem.builder()
+                        .productId(item.getProductId())
+                        .quantity(item.getQuantity())
+                        .build()
+                )
+                .collect(Collectors.toList());
+
         OrderCreatedEvent event = OrderCreatedEvent.of(
                 savedOrder.getId(),
                 savedOrder.getUserId(),
                 savedOrder.getTotalAmount(),
-                savedOrder.getCreatedAt()
+                savedOrder.getCreatedAt(),
+                eventItems
         );
         orderEventProducer.publishOrderCreatedEvent(event);
 
