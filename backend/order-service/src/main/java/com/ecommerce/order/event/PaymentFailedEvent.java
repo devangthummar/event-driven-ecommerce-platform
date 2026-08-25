@@ -7,19 +7,19 @@ import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
-import java.util.List;
 
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-public class StockReservedEvent {
+public class PaymentFailedEvent {
 
     private String eventId;
     private Long orderId;
     private Long userId;
-    private List<StockReservedItem> items;
-    private BigDecimal totalAmount;
+    private BigDecimal amount;
+    private String reason;
+    private String eventType;
     private LocalDateTime createdAt;
 
 }

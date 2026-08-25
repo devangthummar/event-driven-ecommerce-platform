@@ -19,3 +19,4 @@ public class ReserveStockRequest {
     private Integer quantity;
 
 }
+

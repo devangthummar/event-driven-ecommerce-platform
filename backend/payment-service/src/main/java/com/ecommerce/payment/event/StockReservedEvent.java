@@ -1,4 +1,4 @@
-package com.ecommerce.order.event;
+package com.ecommerce.payment.event;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -21,5 +21,4 @@ public class StockReservedEvent {
     private List<StockReservedItem> items;
     private BigDecimal totalAmount;
     private LocalDateTime createdAt;
-
 }

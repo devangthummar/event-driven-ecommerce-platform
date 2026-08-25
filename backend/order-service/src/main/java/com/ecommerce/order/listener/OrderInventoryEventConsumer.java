@@ -1,9 +1,11 @@
 package com.ecommerce.order.listener;
 
 import com.ecommerce.order.entity.enums.OrderStatus;
+import com.ecommerce.order.event.PaymentRequestEvent;
 import com.ecommerce.order.event.StockReservedEvent;
 import com.ecommerce.order.event.StockReservationFailedEvent;
 import com.ecommerce.order.exception.OrderNotFoundException;
+import com.ecommerce.order.producer.PaymentEventProducer;
 import com.ecommerce.order.service.OrderService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -16,6 +18,7 @@ import org.springframework.stereotype.Component;
 public class OrderInventoryEventConsumer {
 
     private final OrderService orderService;
+    private final PaymentEventProducer paymentEventProducer;
 
     @KafkaListener(
             topics = "inventory-events",
@@ -35,15 +38,24 @@ public class OrderInventoryEventConsumer {
 
     private void handleStockReservedEvent(StockReservedEvent event) {
 
-        log.info("Received StockReservedEvent: eventId={}, orderId={}, userId={}, items={}, createdAt={}",
+        log.info("Received StockReservedEvent: eventId={}, orderId={}, userId={}, items={}, totalAmount={}, createdAt={}",
                 event.getEventId(), event.getOrderId(), event.getUserId(),
                 event.getItems() != null ? event.getItems().size() : 0,
-                event.getCreatedAt());
+                event.getTotalAmount(), event.getCreatedAt());
 
         try {
             orderService.updateOrderStatus(event.getOrderId(), OrderStatus.PENDING);
 
             log.info("Order status updated to PENDING for orderId={}", event.getOrderId());
+
+            PaymentRequestEvent paymentRequestEvent = PaymentRequestEvent.of(
+                    event.getOrderId(),
+                    event.getUserId(),
+                    event.getTotalAmount()
+            );
+            paymentEventProducer.publishPaymentRequestEvent(paymentRequestEvent);
+
+            log.info("Published PaymentRequestEvent for orderId={}", event.getOrderId());
 
         } catch (OrderNotFoundException e) {
             log.error("Order not found when handling StockReservedEvent: orderId={}, reason={}",

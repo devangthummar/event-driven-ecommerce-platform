@@ -10,6 +10,7 @@ import com.ecommerce.payment.mapper.PaymentMapper;
 import com.ecommerce.payment.repository.PaymentRepository;
 import com.ecommerce.payment.service.PaymentService;
 import com.ecommerce.payment.service.WalletService;
+import org.springframework.transaction.annotation.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -59,6 +60,8 @@ public class PaymentServiceImpl implements PaymentService {
         return paymentMapper.toPaymentResponse(payment);
     }
 
+
+    @Transactional
     @Override
     public PaymentResponse processPayment(ProcessPaymentRequest request) {
 
@@ -84,6 +87,7 @@ public class PaymentServiceImpl implements PaymentService {
             payment.setPaymentStatus(PaymentStatus.SUCCESS);
 
         } catch (RuntimeException exception) {
+
 
             payment.setPaymentStatus(PaymentStatus.FAILED);
         }

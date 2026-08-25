@@ -81,7 +81,8 @@ public class OrderEventConsumer {
             StockReservedEvent reservedEvent = StockReservedEvent.of(
                     event.getOrderId(),
                     event.getUserId(),
-                    reservedItems
+                    reservedItems,
+                    event.getTotalAmount()
             );
 
             log.info("All items reserved successfully for orderId={}, publishing StockReservedEvent",

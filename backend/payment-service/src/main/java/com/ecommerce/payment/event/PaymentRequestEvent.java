@@ -1,4 +1,4 @@
-package com.ecommerce.order.event;
+package com.ecommerce.payment.event;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -7,19 +7,19 @@ import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
-import java.util.List;
 
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-public class StockReservedEvent {
+public class PaymentRequestEvent {
 
     private String eventId;
     private Long orderId;
     private Long userId;
-    private List<StockReservedItem> items;
-    private BigDecimal totalAmount;
+    private BigDecimal amount;
+    private String paymentMethod;
+    private String eventType;
     private LocalDateTime createdAt;
 
 }

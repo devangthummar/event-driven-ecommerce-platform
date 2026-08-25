@@ -1,4 +1,4 @@
-package com.ecommerce.inventory.event;
+package com.ecommerce.order.event;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -7,29 +7,30 @@ import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
-import java.util.List;
 import java.util.UUID;
 
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-public class StockReservedEvent {
+public class PaymentRequestEvent {
 
     private String eventId;
     private Long orderId;
     private Long userId;
-    private List<StockReservedItem> items;
-    private BigDecimal totalAmount;
+    private BigDecimal amount;
+    private String paymentMethod;
+    private String eventType;
     private LocalDateTime createdAt;
 
-    public static StockReservedEvent of(Long orderId, Long userId, List<StockReservedItem> items, BigDecimal totalAmount) {
-        return StockReservedEvent.builder()
+    public static PaymentRequestEvent of(Long orderId, Long userId, BigDecimal amount) {
+        return PaymentRequestEvent.builder()
                 .eventId(UUID.randomUUID().toString())
                 .orderId(orderId)
                 .userId(userId)
-                .items(items)
-                .totalAmount(totalAmount)
+                .amount(amount)
+                .paymentMethod("WALLET")
+                .eventType("PAYMENT_REQUEST")
                 .createdAt(LocalDateTime.now())
                 .build();
     }
