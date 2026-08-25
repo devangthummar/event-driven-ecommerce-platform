@@ -11,6 +11,9 @@ import lombok.*;
 @Builder
 public class ReserveStockRequest {
 
+    @NotNull(message = "Order ID is required.")
+    private Long orderId;
+
     @NotNull(message = "Product ID is required.")
     private Long productId;
 

@@ -1,9 +1,11 @@
 package com.ecommerce.order.listener;
 
 import com.ecommerce.order.entity.enums.OrderStatus;
+import com.ecommerce.order.event.OrderCancelledEvent;
 import com.ecommerce.order.event.PaymentFailedEvent;
 import com.ecommerce.order.event.PaymentSuccessEvent;
 import com.ecommerce.order.exception.OrderNotFoundException;
+import com.ecommerce.order.producer.OrderEventProducer;
 import com.ecommerce.order.service.OrderService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -16,6 +18,7 @@ import org.springframework.stereotype.Component;
 public class OrderPaymentEventConsumer {
 
     private final OrderService orderService;
+    private final OrderEventProducer orderEventProducer;
 
     @KafkaListener(
             topics = "payment-success-events",
@@ -56,6 +59,15 @@ public class OrderPaymentEventConsumer {
 
             log.info("Order status updated to CANCELLED for orderId={}, reason={}",
                     event.getOrderId(), event.getReason());
+
+            OrderCancelledEvent orderCancelledEvent = OrderCancelledEvent.of(
+                    event.getOrderId(),
+                    event.getUserId(),
+                    event.getReason()
+            );
+            orderEventProducer.publishOrderCancelledEvent(orderCancelledEvent);
+
+            log.info("Published OrderCancelledEvent for orderId={}", event.getOrderId());
 
         } catch (OrderNotFoundException e) {
             log.error("Order not found when handling PaymentFailedEvent: orderId={}, reason={}",

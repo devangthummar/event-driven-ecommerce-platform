@@ -52,6 +52,7 @@ public class OrderEventConsumer {
 
             try {
                 ReserveStockRequest request = ReserveStockRequest.builder()
+                        .orderId(event.getOrderId())
                         .productId(item.getProductId())
                         .quantity(item.getQuantity())
                         .build();

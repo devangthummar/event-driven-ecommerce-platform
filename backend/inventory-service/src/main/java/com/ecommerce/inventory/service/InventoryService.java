@@ -19,4 +19,6 @@ public interface InventoryService {
 
     InventoryResponse confirmReservedStock(ReserveStockRequest request);
 
+    void releaseStockForOrder(Long orderId);
+
 }

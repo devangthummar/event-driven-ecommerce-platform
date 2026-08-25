@@ -4,25 +4,30 @@ import com.ecommerce.inventory.dto.request.ReserveStockRequest;
 import com.ecommerce.inventory.dto.request.StockRequest;
 import com.ecommerce.inventory.dto.response.InventoryResponse;
 import com.ecommerce.inventory.entity.Inventory;
+import com.ecommerce.inventory.entity.Reservation;
+import com.ecommerce.inventory.entity.enums.ReservationStatus;
 import com.ecommerce.inventory.exception.InsufficientStockException;
 import com.ecommerce.inventory.exception.InventoryAlreadyExistsException;
 import com.ecommerce.inventory.exception.InventoryNotFoundException;
 import com.ecommerce.inventory.mapper.InventoryMapper;
 import com.ecommerce.inventory.repository.InventoryRepository;
+import com.ecommerce.inventory.repository.ReservationRepository;
 import com.ecommerce.inventory.service.InventoryService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
-
-
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class InventoryServiceImpl implements InventoryService {
 
     private final InventoryRepository inventoryRepository;
-
+    private final ReservationRepository reservationRepository;
     private final InventoryMapper inventoryMapper;
 
     @Override
@@ -87,8 +92,7 @@ public class InventoryServiceImpl implements InventoryService {
 
         return inventoryMapper.toInventoryResponse(updatedInventory);
 
-    }
-    @Override
+    }    @Override
     public InventoryResponse reserveStock(ReserveStockRequest request) {
 
         Inventory inventory = inventoryRepository
@@ -118,8 +122,17 @@ public class InventoryServiceImpl implements InventoryService {
 
         Inventory updatedInventory = inventoryRepository.save(inventory);
 
-        return inventoryMapper.toInventoryResponse(updatedInventory);
+        Reservation reservation = Reservation.builder()
+                .orderId(request.getOrderId())
+                .productId(request.getProductId())
+                .quantity(request.getQuantity())
+                .status(ReservationStatus.RESERVED)
+                .createdAt(LocalDateTime.now())
+                .build();
 
+        reservationRepository.save(reservation);
+
+        return inventoryMapper.toInventoryResponse(updatedInventory);
     }
 
     @Override
@@ -154,9 +167,7 @@ public class InventoryServiceImpl implements InventoryService {
 
         return inventoryMapper.toInventoryResponse(updatedInventory);
 
-    }
-
-    @Override
+    }    @Override
     public InventoryResponse confirmReservedStock(ReserveStockRequest request) {
 
         Inventory inventory = inventoryRepository
@@ -187,7 +198,52 @@ public class InventoryServiceImpl implements InventoryService {
         Inventory updatedInventory = inventoryRepository.save(inventory);
 
         return inventoryMapper.toInventoryResponse(updatedInventory);
+    }
 
+    @Override
+    @Transactional
+    public void releaseStockForOrder(Long orderId) {
+
+        List<Reservation> reservations = reservationRepository
+                .findByOrderIdAndStatus(orderId, ReservationStatus.RESERVED);
+
+        if (reservations.isEmpty()) {
+            log.warn("No active reservation found for orderId={}. Skipping stock release (idempotent).", orderId);
+            return;
+        }
+
+        for (Reservation reservation : reservations) {
+
+            Inventory inventory = inventoryRepository
+                    .findByProductId(reservation.getProductId())
+                    .orElseThrow(() ->
+                            new InventoryNotFoundException(
+                                    "Inventory not found for productId=" + reservation.getProductId()
+                            ));
+
+            inventory.setReservedQuantity(
+                    inventory.getReservedQuantity() - reservation.getQuantity()
+            );
+
+            inventory.setAvailableQuantity(
+                    inventory.getAvailableQuantity() + reservation.getQuantity()
+            );
+
+            inventory.setLastUpdated(LocalDateTime.now());
+
+            inventoryRepository.save(inventory);
+
+            reservation.setStatus(ReservationStatus.RELEASED);
+            reservation.setUpdatedAt(LocalDateTime.now());
+
+            reservationRepository.save(reservation);
+
+            log.info("Released stock for orderId={}, productId={}, quantity={}",
+                    orderId, reservation.getProductId(), reservation.getQuantity());
+        }
+
+        log.info("Stock release completed for orderId={}. Total reservations released: {}",
+                orderId, reservations.size());
     }
 
 }
