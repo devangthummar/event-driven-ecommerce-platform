@@ -1,14 +1,10 @@
 package com.ecommerce.payment.listener;
 
-import com.ecommerce.payment.dto.request.CreatePaymentRequest;
-import com.ecommerce.payment.dto.request.ProcessPaymentRequest;
 import com.ecommerce.payment.dto.response.PaymentResponse;
-import com.ecommerce.payment.entity.enums.PaymentMethod;
 import com.ecommerce.payment.entity.enums.PaymentStatus;
 import com.ecommerce.payment.event.PaymentFailedEvent;
 import com.ecommerce.payment.event.PaymentRequestEvent;
 import com.ecommerce.payment.event.PaymentSuccessEvent;
-import com.ecommerce.payment.exception.PaymentNotFoundException;
 import com.ecommerce.payment.producer.PaymentEventProducer;
 import com.ecommerce.payment.service.PaymentService;
 import lombok.RequiredArgsConstructor;
@@ -30,28 +26,16 @@ public class PaymentEventConsumer {
                 event.getOrderId(), event.getUserId(), event.getAmount());
 
         try {
-            // Step 1: Create a payment record
-            CreatePaymentRequest createRequest = CreatePaymentRequest.builder()
-                    .orderId(event.getOrderId())
-                    .userId(event.getUserId())
-                    .amount(event.getAmount())
-                    .paymentMethod(PaymentMethod.valueOf(event.getPaymentMethod()))
-                    .build();
+            // Step 1: Process payment idempotently
+            // This handles duplicate detection: if a payment already exists for this orderId
+            // with SUCCESS or FAILED status, it returns the existing result without re-processing.
+            // If PENDING, it processes the existing record. If not found, it creates and processes.
+            PaymentResponse paymentResponse = paymentService.processPaymentIdempotent(event);
+            log.info("Payment processing completed for orderId={}, status={}, transactionId={}",
+                    event.getOrderId(), paymentResponse.getPaymentStatus(), paymentResponse.getTransactionId());
 
-            PaymentResponse paymentResponse = paymentService.createPayment(createRequest);
-            log.info("Payment created successfully with transactionId={}", paymentResponse.getTransactionId());
-
-            // Step 2: Process the payment (deduct from wallet)
-            ProcessPaymentRequest processRequest = ProcessPaymentRequest.builder()
-                    .transactionId(paymentResponse.getTransactionId())
-                    .build();
-
-            PaymentResponse processedResponse = paymentService.processPayment(processRequest);
-            log.info("Payment processed for orderId={}, status={}",
-                    event.getOrderId(), processedResponse.getPaymentStatus());
-
-            // Step 3: Publish result event based on payment status
-            if (processedResponse.getPaymentStatus() == PaymentStatus.SUCCESS) {
+            // Step 2: Publish result event based on payment status
+            if (paymentResponse.getPaymentStatus() == PaymentStatus.SUCCESS) {
                 PaymentSuccessEvent successEvent = PaymentSuccessEvent.of(
                         event.getOrderId(),
                         event.getUserId(),
@@ -64,23 +48,13 @@ public class PaymentEventConsumer {
                         event.getOrderId(),
                         event.getUserId(),
                         event.getAmount(),
-                        "Payment processing failed"
+                        "Payment processing failed with status: " + paymentResponse.getPaymentStatus()
                 );
                 paymentEventProducer.publishPaymentFailedEvent(failedEvent);
             }
 
-        } catch (PaymentNotFoundException e) {
-            log.error("Payment not found for orderId={}: {}", event.getOrderId(), e.getMessage());
-
-            PaymentFailedEvent failedEvent = PaymentFailedEvent.of(
-                    event.getOrderId(),
-                    event.getUserId(),
-                    event.getAmount(),
-                    "Payment not found: " + e.getMessage()
-            );
-            paymentEventProducer.publishPaymentFailedEvent(failedEvent);
-
         } catch (Exception e) {
+            // NEVER let exceptions propagate to Kafka — catch everything and publish PaymentFailedEvent
             log.error("Unexpected error during payment processing for orderId={}, userId={}: {}",
                     event.getOrderId(), event.getUserId(), e.getMessage(), e);
 
@@ -88,7 +62,7 @@ public class PaymentEventConsumer {
                     event.getOrderId(),
                     event.getUserId(),
                     event.getAmount(),
-                    "Unexpected error during payment processing"
+                    "Unexpected error during payment processing: " + e.getMessage()
             );
             paymentEventProducer.publishPaymentFailedEvent(failedEvent);
         }

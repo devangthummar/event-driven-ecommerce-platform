@@ -21,7 +21,9 @@ public class Payment {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(nullable = false)
+    // UNIQUE constraint ensures no duplicate payment records for the same order (idempotency key)
+    // NOTE: Assumes no duplicate orderId records exist in DB before migration
+    @Column(nullable = false, unique = true)
     private Long orderId;
 
     @Column(nullable = false)
