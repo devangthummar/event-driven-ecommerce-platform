@@ -13,8 +13,10 @@ import com.ecommerce.inventory.mapper.InventoryMapper;
 import com.ecommerce.inventory.repository.InventoryRepository;
 import com.ecommerce.inventory.repository.ReservationRepository;
 import com.ecommerce.inventory.service.InventoryService;
+import jakarta.persistence.OptimisticLockException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -93,6 +95,7 @@ public class InventoryServiceImpl implements InventoryService {
         return inventoryMapper.toInventoryResponse(updatedInventory);
 
     }    @Override
+    @Transactional
     public InventoryResponse reserveStock(ReserveStockRequest request) {
 
         Inventory inventory = inventoryRepository
@@ -120,19 +123,28 @@ public class InventoryServiceImpl implements InventoryService {
 
         inventory.setLastUpdated(LocalDateTime.now());
 
-        Inventory updatedInventory = inventoryRepository.save(inventory);
+        try {
+            Inventory updatedInventory = inventoryRepository.save(inventory);
 
-        Reservation reservation = Reservation.builder()
-                .orderId(request.getOrderId())
-                .productId(request.getProductId())
-                .quantity(request.getQuantity())
-                .status(ReservationStatus.RESERVED)
-                .createdAt(LocalDateTime.now())
-                .build();
+            Reservation reservation = Reservation.builder()
+                    .orderId(request.getOrderId())
+                    .productId(request.getProductId())
+                    .quantity(request.getQuantity())
+                    .status(ReservationStatus.RESERVED)
+                    .createdAt(LocalDateTime.now())
+                    .build();
 
-        reservationRepository.save(reservation);
+            reservationRepository.save(reservation);
 
-        return inventoryMapper.toInventoryResponse(updatedInventory);
+            return inventoryMapper.toInventoryResponse(updatedInventory);
+
+        } catch (ObjectOptimisticLockingFailureException | OptimisticLockException e) {
+            log.warn("Optimistic locking failure during stock reservation for productId={}. Concurrent modification detected.",
+                    request.getProductId());
+            throw new InsufficientStockException(
+                    "Stock reservation failed due to concurrent modification. Please retry."
+            );
+        }
     }
 
     @Override
