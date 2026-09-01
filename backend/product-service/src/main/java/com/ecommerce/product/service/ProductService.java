@@ -6,6 +6,8 @@ import com.ecommerce.product.exception.ProductNotFoundException;
 import com.ecommerce.product.model.Product;
 import com.ecommerce.product.repository.ProductRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -58,6 +60,7 @@ public class ProductService {
     }
 
     // GET BY ID
+    @Cacheable(value = "products", key = "#id")
     public ProductResponseDTO getProductById(Long id) {
         Product product = productRepository.findById(id)
                 .orElseThrow(() -> new ProductNotFoundException("Product not found with id: " + id));
@@ -65,6 +68,7 @@ public class ProductService {
     }
 
     // UPDATE
+    @CacheEvict(value = "products", key = "#id")
     public ProductResponseDTO updateProduct(Long id, ProductRequestDTO dto) {
         Product product = productRepository.findById(id)
                 .orElseThrow(() -> new ProductNotFoundException("Product not found with id: " + id));
@@ -79,6 +83,7 @@ public class ProductService {
     }
 
     // DELETE
+    @CacheEvict(value = "products", key = "#id")
     public void deleteProduct(Long id) {
         Product product = productRepository.findById(id)
                 .orElseThrow(() -> new ProductNotFoundException("Product not found with id: " + id));

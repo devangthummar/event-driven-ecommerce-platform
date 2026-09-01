@@ -1,34 +1,45 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project xmlns="http://maven.apache.org/POM/4.0.0"
          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0
-         https://maven.apache.org/xsd/maven-4.0.0.xsd">
+         xsi:schemaLocation="https://maven.apache.org/POM/4.0.0
+                             https://maven.apache.org/xsd/maven-4.0.0.xsd">
+
     <modelVersion>4.0.0</modelVersion>
 
-    <!-- ✅ FIX #1: Use the CORRECT Spring Boot version -->
+    <!-- Spring Boot Parent -->
     <parent>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-parent</artifactId>
-        <version>3.3.4</version>  <!-- Latest stable release -->
+        <version>3.3.4</version>
         <relativePath/>
     </parent>
 
+    <!-- Project Information -->
     <groupId>com.ecommerce</groupId>
     <artifactId>product-service</artifactId>
     <version>0.0.1-SNAPSHOT</version>
     <name>product-service</name>
-    <description>Product Service for E-Commerce Platform</description>
+    <description>Product Service for Event Driven E-Commerce Platform</description>
 
-    <!-- ✅ FIX #2: Single source of truth for Java version -->
+    <!-- Project Properties -->
     <properties>
-        <java.version>17</java.version>  <!-- ✅ Use Java 17 -->
-        <maven.compiler.source>17</maven.compiler.source>
-        <maven.compiler.target>17</maven.compiler.target>
+        <java.version>17</java.version>
+
+        <lombok.version>1.18.38</lombok.version>
+        <mapstruct.version>1.6.2</mapstruct.version>
+
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     </properties>
 
+    <!-- Dependencies -->
     <dependencies>
-        <!-- ✅ Spring Boot Starters -->
+
+        <!-- Spring Boot -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-web</artifactId>
+        </dependency>
+
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-data-jpa</artifactId>
@@ -39,43 +50,53 @@
             <artifactId>spring-boot-starter-validation</artifactId>
         </dependency>
 
+        <!-- Redis Cache -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-web</artifactId>  <!-- ✅ Use 'starter-web' not 'starter-webmvc' -->
+            <artifactId>spring-boot-starter-data-redis</artifactId>
         </dependency>
 
-        <!-- ✅ Database -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-cache</artifactId>
+        </dependency>
+
+        <!-- PostgreSQL -->
         <dependency>
             <groupId>org.postgresql</groupId>
             <artifactId>postgresql</artifactId>
             <scope>runtime</scope>
         </dependency>
 
-        <!-- ✅ Lombok (with annotation processing) -->
+        <!-- Lombok -->
         <dependency>
             <groupId>org.projectlombok</groupId>
             <artifactId>lombok</artifactId>
+            <version>${lombok.version}</version>
             <optional>true</optional>
         </dependency>
 
-        <!-- ✅ MapStruct (for DTO mapping - you'll need this soon) -->
+        <!-- MapStruct -->
         <dependency>
             <groupId>org.mapstruct</groupId>
             <artifactId>mapstruct</artifactId>
-            <version>1.6.2</version>
+            <version>${mapstruct.version}</version>
         </dependency>
 
-        <!-- ✅ Test Dependencies -->
+        <!-- Testing -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-test</artifactId>
             <scope>test</scope>
         </dependency>
+
     </dependencies>
 
+    <!-- Build -->
     <build>
         <plugins>
-            <!-- ✅ Spring Boot Maven Plugin -->
+
+            <!-- Spring Boot Plugin -->
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
@@ -89,33 +110,43 @@
                 </configuration>
             </plugin>
 
-            <!-- ✅ Simplified Maven Compiler Plugin -->
+            <!-- Maven Compiler Plugin -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
                 <version>3.13.0</version>
+
                 <configuration>
-                    <source>17</source>
-                    <target>17</target>
+
+                    <!-- Modern Java compilation -->
+                    <release>${java.version}</release>
+
+                    <!-- Enable annotation processors -->
                     <annotationProcessorPaths>
-                        <!-- Lombok Annotation Processor -->
+
                         <path>
                             <groupId>org.projectlombok</groupId>
                             <artifactId>lombok</artifactId>
                             <version>${lombok.version}</version>
                         </path>
-                        <!-- MapStruct Annotation Processor -->
+
                         <path>
                             <groupId>org.mapstruct</groupId>
                             <artifactId>mapstruct-processor</artifactId>
-                            <version>1.6.2</version>
+                            <version>${mapstruct.version}</version>
                         </path>
+
                     </annotationProcessorPaths>
+
+                    <!-- Required for Spring Boot 3 -->
                     <compilerArgs>
-                        <arg>-parameters</arg>  <!-- Required for Spring Boot 3.x parameter name retention -->
+                        <arg>-parameters</arg>
                     </compilerArgs>
+
                 </configuration>
             </plugin>
+
         </plugins>
     </build>
+
 </project>
