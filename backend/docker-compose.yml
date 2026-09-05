@@ -1,4 +1,4 @@
-version: '3.8'
+
 
 services:
   # ==========================================
@@ -93,6 +93,9 @@ services:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/user_service_db
       SPRING_DATASOURCE_USERNAME: postgres
       SPRING_DATASOURCE_PASSWORD: password
+      JWT_PRIVATE_KEY_PATH: /app/keys/jwt-private.pem
+    volumes:
+      - ./keys:/app/keys:ro
     depends_on:
       postgres:
         condition: service_healthy
@@ -132,6 +135,10 @@ services:
       SPRING_DATASOURCE_USERNAME: postgres
       SPRING_DATASOURCE_PASSWORD: password
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9093
+      JWT_PUBLIC_KEY_PATH: /app/keys/jwt-public.pem
+      JWT_ISSUER: user-service
+    volumes:
+      - ./keys:/app/keys:ro
     depends_on:
       postgres:
         condition: service_healthy
@@ -152,6 +159,10 @@ services:
       SPRING_DATASOURCE_USERNAME: postgres
       SPRING_DATASOURCE_PASSWORD: password
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9093
+      JWT_PUBLIC_KEY_PATH: /app/keys/jwt-public.pem
+      JWT_ISSUER: user-service
+    volumes:
+      - ./keys:/app/keys:ro
     depends_on:
       postgres:
         condition: service_healthy
@@ -172,6 +183,10 @@ services:
       SPRING_DATASOURCE_USERNAME: postgres
       SPRING_DATASOURCE_PASSWORD: password
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9093
+      JWT_PUBLIC_KEY_PATH: /app/keys/jwt-public.pem
+      JWT_ISSUER: user-service
+    volumes:
+      - ./keys:/app/keys:ro
     depends_on:
       postgres:
         condition: service_healthy

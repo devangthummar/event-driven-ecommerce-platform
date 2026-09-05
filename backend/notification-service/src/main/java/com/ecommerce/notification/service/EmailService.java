@@ -4,6 +4,7 @@ import jakarta.mail.MessagingException;
 import jakarta.mail.internet.MimeMessage;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.mail.MailException;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.stereotype.Service;
@@ -68,9 +69,15 @@ public class EmailService {
 
             log.info("Order confirmation email sent successfully to={} for orderId={}", toEmail, orderId);
 
+        } catch (MailException e) {
+            log.warn("Email sending failed in dev environment (SMTP auth), but event processing continues. to={}, orderId={}, error={}",
+                    toEmail, orderId, e.getMessage());
         } catch (MessagingException e) {
             log.error("Failed to send order confirmation email to={} for orderId={}: {}",
                     toEmail, orderId, e.getMessage(), e);
+        } catch (Exception e) {
+            log.warn("Unexpected error sending email to={} for orderId={}: {}. Continuing event processing.",
+                    toEmail, orderId, e.getMessage());
         }
     }
 

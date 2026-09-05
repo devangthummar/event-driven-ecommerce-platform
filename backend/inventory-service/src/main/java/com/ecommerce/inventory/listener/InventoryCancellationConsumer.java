@@ -16,22 +16,28 @@ public class InventoryCancellationConsumer {
 
     @KafkaListener(
             topics = "order-cancelled-events",
-            groupId = "inventory-service-group"
+            groupId = "inventory-service-group",
+            properties = {"spring.json.value.default.type=com.ecommerce.inventory.event.OrderCancelledEvent"}
     )
     public void handleOrderCancelledEvent(OrderCancelledEvent event) {
 
-        log.info("Received OrderCancelledEvent: eventId={}, orderId={}, userId={}, reason={}, createdAt={}",
-                event.getEventId(), event.getOrderId(), event.getUserId(),
-                event.getReason(), event.getCreatedAt());
-
         try {
-            inventoryService.releaseStockForOrder(event.getOrderId());
-            log.info("Stock release completed for orderId={}", event.getOrderId());
-        } catch (Exception e) {
-            log.error("Failed to release stock for orderId={}: {}", event.getOrderId(), e.getMessage(), e);
-        }
+            log.info("Received OrderCancelledEvent: eventId={}, orderId={}, userId={}, reason={}, createdAt={}",
+                    event.getEventId(), event.getOrderId(), event.getUserId(),
+                    event.getReason(), event.getCreatedAt());
 
-        log.info("Finished processing OrderCancelledEvent: orderId={}", event.getOrderId());
+            try {
+                inventoryService.releaseStockForOrder(event.getOrderId());
+                log.info("Stock release completed for orderId={}", event.getOrderId());
+            } catch (Exception e) {
+                log.error("Failed to release stock for orderId={}: {}", event.getOrderId(), e.getMessage(), e);
+            }
+
+            log.info("Finished processing OrderCancelledEvent: orderId={}", event.getOrderId());
+
+        } catch (Exception e) {
+            log.error("Error processing OrderCancelledEvent: {}", e.getMessage(), e);
+        }
     }
 
 }

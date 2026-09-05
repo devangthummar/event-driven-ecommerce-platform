@@ -3,14 +3,24 @@ package com.ecommerce.order.listener;
 import com.ecommerce.order.entity.enums.OrderStatus;
 import com.ecommerce.order.event.PaymentRequestEvent;
 import com.ecommerce.order.event.StockReservedEvent;
+import com.ecommerce.order.event.StockReservedItem;
 import com.ecommerce.order.event.StockReservationFailedEvent;
 import com.ecommerce.order.exception.OrderNotFoundException;
 import com.ecommerce.order.producer.PaymentEventProducer;
 import com.ecommerce.order.service.OrderService;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
+
+import java.math.BigDecimal;
+import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.UUID;
 
 @Slf4j
 @Component
@@ -19,19 +29,29 @@ public class OrderInventoryEventConsumer {
 
     private final OrderService orderService;
     private final PaymentEventProducer paymentEventProducer;
+    private final ObjectMapper objectMapper;
 
     @KafkaListener(
             topics = "inventory-events",
             groupId = "order-service-group"
     )
-    public void handleInventoryEvent(Object event) {
+    public void handleInventoryEvent(ConsumerRecord<String, String> record) {
 
-        if (event instanceof StockReservedEvent reservedEvent) {
-            handleStockReservedEvent(reservedEvent);
-        } else if (event instanceof StockReservationFailedEvent failedEvent) {
-            handleStockReservationFailedEvent(failedEvent);
-        } else {
-            log.warn("Received unknown event type: {}", event.getClass().getSimpleName());
+        try {
+            String json = record.value();
+            JsonNode node = objectMapper.readTree(json);
+
+            if (node.has("items") && node.has("totalAmount")) {
+                StockReservedEvent reservedEvent = objectMapper.convertValue(node, StockReservedEvent.class);
+                handleStockReservedEvent(reservedEvent);
+            } else if (node.has("reason")) {
+                StockReservationFailedEvent failedEvent = objectMapper.convertValue(node, StockReservationFailedEvent.class);
+                handleStockReservationFailedEvent(failedEvent);
+            } else {
+                log.warn("Received unknown event type from inventory-events topic: {}", json.substring(0, Math.min(200, json.length())));
+            }
+        } catch (Exception e) {
+            log.error("Error deserializing inventory event: {}", e.getMessage(), e);
         }
 
     }

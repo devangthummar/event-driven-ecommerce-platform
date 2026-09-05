@@ -4,11 +4,13 @@ import com.ecommerce.order.dto.request.CreateOrderRequest;
 import com.ecommerce.order.dto.request.OrderItemRequest;
 import com.ecommerce.order.dto.request.UpdateOrderStatusRequest;
 import com.ecommerce.order.dto.response.OrderResponse;
+import com.ecommerce.order.dto.response.ProductResponse;
 import com.ecommerce.order.entity.Order;
 import com.ecommerce.order.entity.OrderItem;
 import com.ecommerce.order.entity.enums.OrderStatus;
 import com.ecommerce.order.event.OrderCreatedEvent;
 import com.ecommerce.order.event.OrderEventItem;
+import com.ecommerce.order.exception.OrderException;
 import com.ecommerce.order.exception.OrderNotFoundException;
 import com.ecommerce.order.mapper.OrderMapper;
 import com.ecommerce.order.producer.OrderEventProducer;
@@ -16,7 +18,9 @@ import com.ecommerce.order.repository.OrderRepository;
 import com.ecommerce.order.service.OrderService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import org.springframework.web.client.RestTemplate;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -32,6 +36,10 @@ public class OrderServiceImpl implements OrderService {
     private final OrderRepository orderRepository;
     private final OrderMapper orderMapper;
     private final OrderEventProducer orderEventProducer;
+    private final RestTemplate restTemplate;
+
+    @Value("${product.service.url}")
+    private String productServiceUrl;
 
 
     @Override
@@ -39,7 +47,7 @@ public class OrderServiceImpl implements OrderService {
 
         Order order = new Order();
 
-        order.setUserId(1L);
+        order.setUserId(request.getUserId());
 
         order.setOrderNumber(
                 "ORD-" + UUID.randomUUID().toString().substring(0,8)
@@ -59,13 +67,9 @@ public class OrderServiceImpl implements OrderService {
 
             item.setQuantity(itemRequest.getQuantity());
 
-        /*
-            Temporary price.
-
-            Later this will come from Product Service.
-        */
-
-            item.setPrice(BigDecimal.valueOf(1000));
+            // Fetch actual price from Product Service
+            BigDecimal price = fetchProductPrice(itemRequest.getProductId());
+            item.setPrice(price);
 
             item.setOrder(order);
 
@@ -157,6 +161,26 @@ public class OrderServiceImpl implements OrderService {
 
         orderRepository.delete(order);
 
+    }
+
+    private BigDecimal fetchProductPrice(Long productId) {
+        try {
+            String url = productServiceUrl + "/api/products/" + productId;
+            log.info("Fetching product price from Product Service: url={}", url);
+            ProductResponse productResponse = restTemplate.getForObject(url, ProductResponse.class);
+            if (productResponse != null && productResponse.getPrice() != null) {
+                log.info("Fetched product price: productId={}, price={}", productId, productResponse.getPrice());
+                return productResponse.getPrice();
+            } else {
+                log.warn("Product Service returned null/empty price for productId={}; rejecting order", productId);
+                throw new OrderException("Unable to resolve product price for productId=" + productId);
+            }
+        } catch (OrderException e) {
+            throw e;
+        } catch (Exception e) {
+            log.error("Failed to fetch product price from Product Service for productId={}: {}", productId, e.getMessage());
+            throw new OrderException("Unable to fetch product price for productId=" + productId, e);
+        }
     }
 
 }

@@ -7,8 +7,10 @@ import com.ecommerce.payment.event.PaymentRequestEvent;
 import com.ecommerce.payment.event.PaymentSuccessEvent;
 import com.ecommerce.payment.producer.PaymentEventProducer;
 import com.ecommerce.payment.service.PaymentService;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
 
@@ -19,17 +21,16 @@ public class PaymentEventConsumer {
 
     private final PaymentService paymentService;
     private final PaymentEventProducer paymentEventProducer;
+    private final ObjectMapper objectMapper;
 
     @KafkaListener(topics = "payment-commands", groupId = "payment-service-group")
-    public void handlePaymentRequestEvent(PaymentRequestEvent event) {
-        log.info("Received PaymentRequestEvent for orderId={}, userId={}, amount={}",
-                event.getOrderId(), event.getUserId(), event.getAmount());
-
+    public void handlePaymentRequestEvent(ConsumerRecord<String, String> record) {
         try {
+            PaymentRequestEvent event = objectMapper.readValue(record.value(), PaymentRequestEvent.class);
+            log.info("Received PaymentRequestEvent for orderId={}, userId={}, amount={}",
+                    event.getOrderId(), event.getUserId(), event.getAmount());
+
             // Step 1: Process payment idempotently
-            // This handles duplicate detection: if a payment already exists for this orderId
-            // with SUCCESS or FAILED status, it returns the existing result without re-processing.
-            // If PENDING, it processes the existing record. If not found, it creates and processes.
             PaymentResponse paymentResponse = paymentService.processPaymentIdempotent(event);
             log.info("Payment processing completed for orderId={}, status={}, transactionId={}",
                     event.getOrderId(), paymentResponse.getPaymentStatus(), paymentResponse.getTransactionId());
@@ -54,17 +55,19 @@ public class PaymentEventConsumer {
             }
 
         } catch (Exception e) {
-            // NEVER let exceptions propagate to Kafka — catch everything and publish PaymentFailedEvent
-            log.error("Unexpected error during payment processing for orderId={}, userId={}: {}",
-                    event.getOrderId(), event.getUserId(), e.getMessage(), e);
-
-            PaymentFailedEvent failedEvent = PaymentFailedEvent.of(
-                    event.getOrderId(),
-                    event.getUserId(),
-                    event.getAmount(),
-                    "Unexpected error during payment processing: " + e.getMessage()
-            );
-            paymentEventProducer.publishPaymentFailedEvent(failedEvent);
+            log.error("Unexpected error during payment processing: {}", e.getMessage(), e);
+            try {
+                PaymentRequestEvent failedEvent = objectMapper.readValue(record.value(), PaymentRequestEvent.class);
+                PaymentFailedEvent paymentFailedEvent = PaymentFailedEvent.of(
+                        failedEvent.getOrderId(),
+                        failedEvent.getUserId(),
+                        failedEvent.getAmount(),
+                        "Unexpected error during payment processing: " + e.getMessage()
+                );
+                paymentEventProducer.publishPaymentFailedEvent(paymentFailedEvent);
+            } catch (Exception ex) {
+                log.error("Failed to publish PaymentFailedEvent: {}", ex.getMessage(), ex);
+            }
         }
     }
 }

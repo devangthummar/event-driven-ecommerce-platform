@@ -15,7 +15,7 @@ RUN mvn package -DskipTests -B
 # ===========================
 # Stage 2: Run
 # ===========================
-FROM eclipse-temurin-17-jre-alpine
+FROM eclipse-temurin:17-jre-alpine
 WORKDIR /app
 
 # Copy the built JAR

@@ -1,0 +1,334 @@
+{
+  "info": {
+    "name": "E-Commerce E2E Kafka Flow",
+    "description": "End-to-end test collection for the Event-Driven E-Commerce Platform.\n\nSequence: Register User → Login → Create Wallet → Add Balance → Create Product → Add Inventory → Create Order\n\nThe Order creation triggers the Kafka event flow: Order → Inventory → Payment → Order.\n\nNOTE: This collection uses the ACTUAL endpoints from the codebase:\n- User Service: port 8006\n- Product Service: port 8081\n- Inventory Service: port 8083\n- Order Service: port 8082\n- Payment/Wallet Service: port 8085",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "user_url",
+      "value": "http://localhost:8006",
+      "type": "string"
+    },
+    {
+      "key": "product_url",
+      "value": "http://localhost:8081",
+      "type": "string"
+    },
+    {
+      "key": "inventory_url",
+      "value": "http://localhost:8083",
+      "type": "string"
+    },
+    {
+      "key": "order_url",
+      "value": "http://localhost:8082",
+      "type": "string"
+    },
+    {
+      "key": "payment_url",
+      "value": "http://localhost:8085",
+      "type": "string"
+    },
+    {
+      "key": "userId",
+      "value": "1",
+      "type": "string"
+    },
+    {
+      "key": "productId",
+      "value": "1",
+      "type": "string"
+    },
+    {
+      "key": "orderId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "authToken",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "1. Register User",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"firstName\": \"Test\",\n  \"lastName\": \"User\",\n  \"email\": \"test@ecommerce.com\",\n  \"password\": \"password123\",\n  \"phoneNumber\": \"9876543210\"\n}"
+        },
+        "url": {
+          "raw": "{{user_url}}/api/users/register",
+          "host": ["{{user_url}}"],
+          "path": ["api", "users", "register"]
+        },
+        "description": "Register a new user. Returns the created user with id."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "var jsonData = pm.response.json();",
+              "pm.test('User created successfully', function () {",
+              "    pm.response.to.have.status(201);",
+              "});",
+              "",
+              "if (jsonData.id) {",
+              "    pm.collectionVariables.set('userId', jsonData.id);",
+              "    console.log('userId set to: ' + jsonData.id);",
+              "}"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "2. Login User",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"test@ecommerce.com\",\n  \"password\": \"password123\"\n}"
+        },
+        "url": {
+          "raw": "{{user_url}}/api/users/login",
+          "host": ["{{user_url}}"],
+          "path": ["api", "users", "login"]
+        },
+        "description": "Login to get JWT token for authenticated requests."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "var jsonData = pm.response.json();",
+              "pm.test('Login successful', function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "",
+              "if (jsonData.token) {",
+              "    pm.collectionVariables.set('authToken', jsonData.token);",
+              "    console.log('authToken set to: ' + jsonData.token.substring(0, 50) + '...');",
+              "}"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "3. Create Wallet",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{payment_url}}/api/wallets/{{userId}}",
+          "host": ["{{payment_url}}"],
+          "path": ["api", "wallets", "{{userId}}"]
+        },
+        "description": "Create a wallet for the registered user. userId is passed as a path variable."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Wallet created successfully', function () {",
+              "    pm.response.to.have.status(201);",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "4. Add Wallet Balance",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{payment_url}}/api/wallets/{{userId}}/balance?amount=1000.00",
+          "host": ["{{payment_url}}"],
+          "path": ["api", "wallets", "{{userId}}", "balance"],
+          "query": [
+            {
+              "key": "amount",
+              "value": "1000.00"
+            }
+          ]
+        },
+        "description": "Add balance to the user's wallet. Amount is passed as a query parameter."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Balance added successfully', function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "",
+              "var jsonData = pm.response.json();",
+              "pm.test('Wallet balance is 1000', function () {",
+              "    pm.expect(jsonData.balance).to.eql(1000.00);",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "5. Create Product",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"Laptop\",\n  \"description\": \"Gaming Laptop\",\n  \"price\": 500.00,\n  \"category\": \"ELECTRONICS\",\n  \"stockQuantity\": 100,\n  \"imageUrl\": \"https://example.com/laptop.jpg\"\n}"
+        },
+        "url": {
+          "raw": "{{product_url}}/api/products",
+          "host": ["{{product_url}}"],
+          "path": ["api", "products"]
+        },
+        "description": "Create a product in the product catalog. Returns the created product with id."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "var jsonData = pm.response.json();",
+              "pm.test('Product created successfully', function () {",
+              "    pm.response.to.have.status(201);",
+              "});",
+              "",
+              "if (jsonData.id) {",
+              "    pm.collectionVariables.set('productId', jsonData.id);",
+              "    console.log('productId set to: ' + jsonData.id);",
+              "}"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "6. Add Inventory",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"productId\": {{productId}},\n  \"quantity\": 50\n}"
+        },
+        "url": {
+          "raw": "{{inventory_url}}/api/inventory",
+          "host": ["{{inventory_url}}"],
+          "path": ["api", "inventory"]
+        },
+        "description": "Add inventory stock for the product. Endpoint is POST /api/inventory (not /api/inventory/add)."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Inventory added successfully', function () {",
+              "    pm.response.to.have.status(201);",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "7. Create Order",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"items\": [\n    {\n      \"productId\": {{productId}},\n      \"quantity\": 2\n    }\n  ]\n}"
+        },
+        "url": {
+          "raw": "{{order_url}}/api/v1/orders",
+          "host": ["{{order_url}}"],
+          "path": ["api", "v1", "orders"]
+        },
+        "description": "Create an order. This triggers the Kafka event flow: Order → Inventory (StockReserved) → Payment (ProcessPayment). NOTE: Endpoint is /api/v1/orders (not /api/orders). The request body only needs 'items' — userId is derived server-side."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "var jsonData = pm.response.json();",
+              "pm.test('Order created successfully', function () {",
+              "    pm.response.to.have.status(201);",
+              "});",
+              "",
+              "pm.test('Order status is PENDING', function () {",
+              "    pm.expect(jsonData.status).to.eql('PENDING');",
+              "});",
+              "",
+              "if (jsonData.id) {",
+              "    pm.collectionVariables.set('orderId', jsonData.id);",
+              "    console.log('orderId set to: ' + jsonData.id);",
+              "    console.log('Order created! Kafka event flow should now be triggered.');",
+              "    console.log('Order: ' + jsonData.orderNumber + ', Total: ' + jsonData.totalAmount);",
+              "}"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -26,7 +26,8 @@ public class OrderEventConsumer {
 
     @KafkaListener(
             topics = "order-events",
-            groupId = "inventory-service-group"
+            groupId = "inventory-service-group",
+            properties = {"spring.json.value.default.type=com.ecommerce.inventory.event.OrderCreatedEvent"}
     )
     public void handleOrderCreatedEvent(OrderCreatedEvent event) {
 
@@ -106,5 +107,6 @@ public class OrderEventConsumer {
 
         log.info("Finished processing OrderCreatedEvent: orderId={}", event.getOrderId());
     }
-}
 
+
+}
