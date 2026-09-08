@@ -1,464 +1,259 @@
-# Scalable Event-Driven E-Commerce Platform
+# Event-Driven E-Commerce Platform
 
-<p align="center">
+A microservices-based e-commerce platform built with Spring Boot, Apache Kafka, PostgreSQL, and Redis. Orders flow through an event-driven Saga pattern: **Order → Inventory → Payment → Order**, with independent notification consumption.
 
-A production-grade distributed system built with <strong>Spring Boot Microservices</strong>, <strong>Apache Kafka</strong>, <strong>PostgreSQL</strong>, <strong>Redis</strong>, <strong>Docker</strong>, and <strong>React</strong>.
-
-The project demonstrates modern backend engineering principles including event-driven communication, service decomposition, database-per-service architecture, and scalable system design.
-
-</p>
-
-<p align="center">
-
-<img src="https://img.shields.io/badge/Java-17-orange?style=for-the-badge&logo=openjdk">
-
-<img src="https://img.shields.io/badge/Spring_Boot-3.x-6DB33F?style=for-the-badge&logo=springboot">
-
-<img src="https://img.shields.io/badge/Apache_Kafka-3.x-231F20?style=for-the-badge&logo=apachekafka">
-
-<img src="https://img.shields.io/badge/PostgreSQL-16-4169E1?style=for-the-badge&logo=postgresql">
-
-<img src="https://img.shields.io/badge/Redis-7-DC382D?style=for-the-badge&logo=redis">
-
-<img src="https://img.shields.io/badge/Docker-Latest-2496ED?style=for-the-badge&logo=docker">
-
-<img src="https://img.shields.io/badge/React-18-61DAFB?style=for-the-badge&logo=react">
-
-</p>
-
----
-
-# System Architecture
-
-The platform follows an event-driven microservices architecture. Client requests are routed through a centralized API Gateway, while business services communicate asynchronously using Apache Kafka. Each microservice owns its own database, ensuring loose coupling and independent scalability.
-
-```mermaid
-flowchart TD
-
-    U[Users]
-
-    F[React Frontend]
-
-    G[Spring Cloud Gateway]
-
-    US[User Service]
-    PS[Product Service]
-    OS[Order Service]
-    IS[Inventory Service]
-    PAS[Payment Service]
-    NS[Notification Service]
-    DS[Delivery Service]
-
-    K[Apache Kafka]
-
-    UDB[(User Database)]
-    PDB[(Product Database)]
-    ODB[(Order Database)]
-    IDB[(Inventory Database)]
-    PAYDB[(Payment Database)]
-
-    R[(Redis Cache)]
-
-    U --> F
-    F --> G
-
-    G --> US
-    G --> PS
-    G --> OS
-    G --> IS
-    G --> PAS
-
-    US --> UDB
-    PS --> PDB
-    OS --> ODB
-    IS --> IDB
-    PAS --> PAYDB
-
-    OS -- Publishes Events --> K
-
-    K -- order.created --> IS
-    K -- inventory.reserved --> PAS
-    K -- payment.completed --> NS
-    K -- payment.completed --> DS
-
-    PS -. Cache .-> R
-```
-
-
----
-
-# Overview
-
-Modern e-commerce platforms require more than CRUD operations. They must support independent deployments, scalable communication, fault isolation, and clear separation of business responsibilities.
-
-This repository explores those engineering challenges through a distributed microservices architecture where every service owns its own business capability and communicates asynchronously using Apache Kafka events.
-
-Rather than focusing on a single framework, the project emphasizes architectural thinking, maintainability, and production-oriented backend development.
-
----
-
-# Why Event-Driven Architecture?
-
-Traditional synchronous communication creates tight dependencies between services, making systems harder to scale and maintain.
-
-This project adopts an event-driven architecture to allow services to communicate through business events instead of direct service-to-service calls whenever possible.
-
-This approach provides:
-
-- Loose coupling
-- Independent deployments
-- Better fault isolation
-- Improved scalability
-- Asynchronous processing
-- Easier feature evolution
-
----
-
-# Key Characteristics
-
-- Spring Boot Microservices
-- Apache Kafka Event Streaming
-- Database-per-Service Architecture
-- API Gateway
-- JWT Authentication
-- PostgreSQL
-- Redis Caching
-- Dockerized Infrastructure
-- RESTful APIs
-- Layered Architecture
-- Maven Multi-Module Project
-
----
-
-# Technology Choices
-
-The technologies used in this project were selected based on architectural requirements rather than popularity. Each component serves a specific purpose within the overall system.
-
-| Technology | Why it was chosen |
-|------------|-------------------|
-| Java 17 | Modern LTS release with improved language features and long-term support |
-| Spring Boot | Rapid development of production-ready microservices |
-| Spring Cloud Gateway | Centralized routing, filtering, and request forwarding |
-| Apache Kafka | Asynchronous communication and loose coupling between services |
-| PostgreSQL | ACID-compliant relational database for reliable business data |
-| Redis | High-speed caching to reduce database load and improve response time |
-| Docker | Consistent development and deployment environments |
-| Maven | Dependency management and multi-module project structure |
-| React | Component-based frontend architecture for a modern user experience |
-
----
-
-# Service Responsibilities
-
-Each service has a single business responsibility and owns its own data, allowing independent development, deployment, and scaling.
-
-| Service | Responsibility |
-|----------|----------------|
-| API Gateway | Entry point for all client requests, routing, and cross-cutting concerns |
-| User Service | User registration, authentication, authorization, and profile management |
-| Product Service | Product catalog, categories, pricing, and search |
-| Order Service | Order creation, validation, and lifecycle management |
-| Inventory Service | Stock reservation, availability checks, and inventory updates |
-| Payment Service | Payment processing, transaction handling, and payment status |
-| Notification Service | Email and in-app notifications triggered by business events |
-| Delivery Service | Shipment assignment, delivery status, and order tracking |
-
-
----
-
-
-# Advanced Distributed Systems Capabilities
-
-Beyond standard CRUD operations, this platform is designed to demonstrate engineering patterns commonly used in large-scale e-commerce and fintech systems.
-
-| Capability                         | Design Approach                                                                                                                                                                                                       | Engineering Benefit                                                                                              |
-| ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| **Saga Pattern with Compensation** | Distributed transactions are coordinated by the Order Service. If any downstream operation fails (such as inventory reservation or payment), compensating actions automatically roll back previously completed steps. | Maintains data consistency across multiple independent services without using distributed database transactions. |
-| **Idempotent Payment Processing**  | Every payment request is associated with a unique **Idempotency Key**. Duplicate requests are safely ignored to ensure that the same payment is never processed twice.                                                | Protects against duplicate charges caused by retries, network failures, or client-side resubmissions.            |
-| **Inventory Reservation System**   | Product inventory is temporarily reserved when an order is placed. If payment is not completed within a configurable timeout period (for example, 10 minutes), the reservation is automatically released.             | Prevents overselling while allowing customers a reasonable checkout window.                                      |
-| **Real-time Delivery Tracking**    | The Delivery Service publishes live location updates through WebSocket connections, allowing the frontend to receive delivery status changes without polling.                                                         | Provides a responsive user experience and demonstrates real-time event streaming.                                |
-
-These capabilities reflect the architectural goals of the platform and represent production-inspired solutions for handling distributed transactions, concurrency, reliability, and real-time communication.
-
-
----
-
-
-# Architecture Decisions
-
-Several architectural decisions were made to improve scalability, maintainability, and long-term flexibility.
-
-| Decision | Benefit |
-|----------|---------|
-| Microservices Architecture | Independent deployment and scaling of business domains |
-| Event-Driven Communication | Loose coupling and asynchronous processing |
-| Database per Service | Data ownership and service autonomy |
-| API Gateway | Single entry point for clients and centralized request handling |
-| Layered Architecture | Better separation of responsibilities and easier testing |
-| RESTful APIs | Standardized communication between clients and services |
-| Dockerized Development | Consistent environments across all machines |
-
----
-
-# High-Level Event Flow
-
-The following workflow illustrates how a typical order moves through the platform.
-
-```text
-Customer
-
-    │
-
-    ▼
-
-API Gateway
-
-    │
-
-    ▼
-
-Order Service
-
-    │
-    │  Publish Event
-    ▼
-
-Apache Kafka
-
-    │
-    ├────────────► Inventory Service
-    │
-    ├────────────► Payment Service
-    │
-    ├────────────► Notification Service
-    │
-    └────────────► Delivery Service
+## Architecture
 
 ```
+Client
+  ↓ HTTP (JWT)
+User Service (8006)
+  ↓ Issues RS256 JWT
+Client
+  ↓ HTTP (JWT) + idempotency key
+Order Service (8082)
+  ↓ HTTP (product price lookup)
+Product Service (8081)
+  ↓ Kafka: order-events
+Inventory Service (8084)
+  ↓ Kafka: inventory-events
+Order Service (8082)
+  ↓ Kafka: payment-commands
+Payment Service (8085)
+  ↓ Kafka: payment-success-events / payment-failed-events
+Order Service (8082)
+  ↓ Kafka: order-cancelled-events (compensation)
+Inventory Service (8084)
 
-Each service reacts independently to business events without requiring direct communication with other services.
-
----
-
-# Repository Layout
-
-```text
-event-driven-ecommerce-platform/
-
-├── backend/
-│   ├── api-gateway/
-│   ├── user-service/
-│   ├── product-service/
-│   ├── order-service/
-│   ├── inventory-service/
-│   ├── payment-service/
-│   ├── notification-service/
-│   └── delivery-service/
-│
-├── frontend/
-│
-├── docs/
-│   ├── architecture.png
-│   ├── sequence-diagram.png
-│   └── database-design.png
-│
-├── docker/
-│
-├── scripts/
-│
-├── .github/
-│
-├── docker-compose.yml
-├── pom.xml
-└── README.md
+Notification Service (8086) ← Kafka: order-events (independent consumer)
 ```
 
-The repository is organized to keep application code, infrastructure, documentation, and automation clearly separated. This structure makes navigation easier and supports independent development of each service.
+## Microservices
 
----
+| Service | Port | Database | Responsibility |
+|---------|------|----------|---------------|
+| user-service | 8006 | user_service_db | Registration, login, JWT generation (RS256) |
+| product-service | 8081 | product_service_db | Product CRUD, Redis cache, ADMIN-only mutations |
+| order-service | 8082 | order_service_db | Order creation, Saga orchestration, state machine |
+| inventory-service | 8084 | inventory_db | Stock reservation, compensation, FOR UPDATE locking |
+| payment-service | 8085 | payment_db | Wallet debit, payment idempotency, REQUIRES_NEW tx |
+| notification-service | 8086 | (none) | Order confirmation emails via Kafka events |
 
-# Engineering Principles
+## Technology Stack
 
-The project is developed with an emphasis on writing maintainable and production-oriented code.
+- **Java 17** / **Spring Boot 3.3.4**
+- **Spring Data JPA** / Hibernate
+- **PostgreSQL 15** — per-service databases
+- **Apache Kafka** — event-driven inter-service communication
+- **Redis 7** — product cache (product-service only)
+- **Docker / Docker Compose** — containerized deployment
+- **Maven** — build tool with Maven Wrapper per service
+- **JWT (RS256)** — asymmetric authentication (private key signs, public key validates)
 
-Core principles include:
+## Kafka Event Flow
 
-- Separation of Concerns
-- SOLID Principles
-- Clean Architecture
-- Layered Design
-- Dependency Injection
-- Constructor Injection
-- RESTful API Design
-- Stateless Services
-- Reusable Components
-- Consistent Package Structure
-- Meaningful Git Commit History
-- Configuration Externalization
+```
+Topics:
+  order-events           → Inventory, Notification (consumers)
+  inventory-events       → Order (consumer)
+  payment-commands       → Payment (consumer)
+  payment-success-events → Order (consumer)
+  payment-failed-events  → Order (consumer)
+  order-cancelled-events → Inventory (consumer)
+```
 
----
+### Event Types
 
-# Running the Project Locally
+| Event | Producer | Consumer(s) | Purpose |
+|-------|----------|------------|---------|
+| OrderCreatedEvent | Order | Inventory, Notification | Start saga |
+| StockReservedEvent | Inventory | Order | Stock OK → trigger payment |
+| StockReservationFailedEvent | Inventory | Order | Stock fail → cancel order |
+| PaymentRequestEvent | Order | Payment | Request payment processing |
+| PaymentSuccessEvent | Payment | Order | Payment OK → mark PAID |
+| PaymentFailedEvent | Payment | Order | Payment fail → cancel + compensate |
+| OrderCancelledEvent | Order | Inventory | Compensate: release reserved stock |
 
-## Prerequisites
+## Saga Flow
 
-Install the following software before running the project.
+### Happy Path
+1. **Order Created** → PENDING status → Kafka `order-events`
+2. **Inventory** reserves stock for each item → Kafka `inventory-events`
+3. **Order** receives StockReserved → stays PENDING → Kafka `payment-commands`
+4. **Payment** debits wallet → Kafka `payment-success-events`
+5. **Order** receives PaymentSuccess → PAID
 
-| Software | Recommended Version |
-|----------|---------------------|
-| Java | 17+ |
-| Maven | 3.9+ |
-| Node.js | 20+ |
-| Docker Desktop | Latest |
-| PostgreSQL | 16+ |
-| Git | Latest |
+### Failure: Insufficient Stock
+1. Order Created → Kafka `order-events`
+2. **Inventory** fails to reserve → Kafka `inventory-events` (failed)
+3. **Order** receives failure → CANCELLED → Kafka `order-cancelled-events`
+4. **Inventory** releases any previously reserved items (compensation)
 
----
+### Failure: Insufficient Wallet Balance
+1. Order Created → stock reserved → Kafka `payment-commands`
+2. **Payment** wallet debit fails → FAILED status → Kafka `payment-failed-events`
+3. **Order** receives failure → CANCELLED → Kafka `order-cancelled-events`
+4. **Inventory** releases reserved stock (compensation)
 
-## Clone the Repository
+## Authentication Architecture
+
+- **User Service** signs RS256 JWTs using a private RSA key (`jwt-private.pem`)
+- **All downstream services** validate JWTs using the public RSA key (`jwt-public.pem`)
+- JWT carries: `sub` (email), `iss` (user-service), `role` (ROLE_USER / ROLE_ADMIN)
+- **Kafka communication** is independent of HTTP JWT security
+- **Order → Product HTTP** calls propagate the caller's JWT via `AuthorizationPropagationInterceptor`
+
+### Role-Based Access
+- `GET /api/products/**` — Any authenticated user (ROLE_USER or ROLE_ADMIN)
+- `POST/PUT/DELETE /api/products/**` — ADMIN only (enforced by Spring Security)
+
+## Redis Usage
+
+- **product-service** uses Redis as a read-through cache for `getProductById`
+- Cache TTL: 30 minutes
+- Cache is evicted on `updateProduct` and `deleteProduct`
+- Serialization: Jackson JSON with JavaTimeModule
+
+## Database Overview
+
+| Service | Key Tables | Notable Constraints |
+|---------|-----------|-------------------|
+| user-service | users | UNIQUE(email), UNIQUE(phoneNumber) |
+| product-service | products | PK(id) |
+| order-service | orders, order_items | UNIQUE(user_id, idempotency_key), UNIQUE(order_number) |
+| inventory-service | inventory, reservations | UNIQUE(product_id) on inventory |
+| payment-service | payments, wallets | UNIQUE(order_id), UNIQUE(user_id), UNIQUE(transaction_id) |
+
+## Idempotency
+
+### Order Creation
+- Client sends optional `idempotencyKey` (max 64 chars)
+- Same `(userId, idempotencyKey)` → returns existing order, no duplicate
+- Same key across different users → independent orders (unique constraint is per-user)
+- Concurrent duplicates: DataIntegrityViolationException → re-resolve winner's committed order
+- Without idempotency key: legacy behavior, duplicates allowed (documented)
+
+### Payment Processing
+- `UNIQUE(order_id)` constraint prevents duplicate payments
+- SUCCESS/FAILED payments are returned immediately (idempotent)
+- Concurrent identical events: one wins the insert, loser re-resolves winner's state
+- No false PaymentFailedEvent is ever emitted for a committed SUCCESS
+
+### Inventory Reservation
+- `existsByOrderIdAndProductId` idempotency guard prevents double-decrement
+- Pessimistic FOR UPDATE lock serializes concurrent reservations of the same product
+- Duplicate OrderCreatedEvent redeliveries are safely skipped
+
+## Concurrency Protection
+
+| Mechanism | Where | Purpose |
+|-----------|-------|---------|
+| PESSIMISTIC_WRITE (FOR UPDATE) | Order `findByIdForUpdate` | Serialize status transitions |
+| PESSIMISTIC_WRITE (FOR UPDATE) | Inventory `findByProductIdForUpdate` | Serialize stock reservations |
+| PESSIMISTIC_WRITE (FOR UPDATE) | Payment `findByTransactionIdForUpdate` | Serialize payment processing |
+| Atomic SQL UPDATE WHERE balance >= | Wallet `deductBalanceIfSufficient` | Prevent double-spend |
+| Atomic SQL UPDATE | Wallet `addBalanceAtomically` | Prevent lost updates |
+| @Version (optimistic) | Inventory entity | Secondary safety net |
+| UNIQUE constraints | All services | Prevent duplicate entities |
+
+## Docker Setup
 
 ```bash
-git clone https://github.com/devangthummar/event-driven-ecommerce-platform.git
-
-cd event-driven-ecommerce-platform
-```
-
----
-
-## Start Infrastructure
-
-Run the required infrastructure services.
-
-```bash
+# Start all services
 docker compose up -d
+
+# Start infrastructure only
+docker compose up -d postgres kafka zookeeper redis
+
+# Build all services
+docker compose build
+
+# View logs
+docker compose logs -f order-service
 ```
 
-This starts services such as PostgreSQL, Redis, Apache Kafka, Zookeeper, Kafka UI, and other supporting containers defined in the Docker Compose configuration.
+### Docker Compose Services
+- **postgres:15-alpine** — all databases (init script creates them)
+- **zookeeper** + **kafka** (wurstmeister) — message broker
+- **redis:7-alpine** — product cache
+- All 6 application services with health checks and proper dependencies
 
----
+### Security: Key Mounting
+- User Service receives `jwt-private.pem` (signing only)
+- All other services receive `jwt-public.pem` (validation only)
+- Private key never reaches downstream containers
 
-## Run a Backend Service
+## Environment Variables
 
-Example:
+| Variable | Service(s) | Description |
+|----------|-----------|-------------|
+| JWT_PRIVATE_KEY_PATH | user-service | Path to RSA private key PEM |
+| JWT_PUBLIC_KEY_PATH | all except user | Path to RSA public key PEM |
+| JWT_ISSUER | all except user | Expected JWT issuer (default: user-service) |
+| SPRING_DATASOURCE_URL | all | JDBC URL |
+| SPRING_DATASOURCE_USERNAME | all | PostgreSQL username |
+| SPRING_DATASOURCE_PASSWORD | all | PostgreSQL password |
+| SPRING_KAFKA_BOOTSTRAP_SERVERS | order, inventory, payment, notification | Kafka broker |
+| PRODUCT_SERVICE_URL | order-service | Product Service base URL |
+| PRODUCT_SERVICE_CONNECT_TIMEOUT_MS | order-service | HTTP connect timeout (default: 2000) |
+| PRODUCT_SERVICE_READ_TIMEOUT_MS | order-service | HTTP read timeout (default: 5000) |
+| MAIL_USERNAME | notification-service | SMTP username |
+| MAIL_PASSWORD | notification-service | SMTP password |
+
+## Testing
 
 ```bash
-cd backend/product-service
+# Run tests for a specific service
+cd order-service && ./mvnw test
 
-mvn clean install
-
-mvn spring-boot:run
+# Run all tests across all services (from backend/)
+for svc in user-service product-service order-service inventory-service payment-service notification-service; do
+  cd $svc && ./mvnw test && cd ..
+done
 ```
 
-Repeat the same process for any other microservice.
+### Test Categories
 
----
+| Type | Description | Count |
+|------|-------------|-------|
+| Unit tests | Mocked dependencies, pure logic | 76 |
+| MVC/Web layer tests | @WebMvcTest, JWT security, role matrix | 16 |
+| Context loading tests | SpringBootTest (one per service that has one) | 5 |
+| Genuine concurrency tests | ExecutorService + CyclicBarrier + real DB | 17 |
+| **Total** | | **114** |
 
-## Run the Frontend
+### Genuine Concurrency Tests (17 total)
+- `PaymentConcurrencyIntegrationTest` (8 tests) — double-spend prevention, concurrent wallet operations
+- `OrderIdempotencyConcurrencyIntegrationTest` (5 tests) — concurrent duplicate order creation
+- `InventoryConcurrencyIntegrationTest` (4 tests) — oversell prevention, concurrent reservations
 
-```bash
-cd frontend
+All concurrency tests use `ExecutorService` + `CyclicBarrier` to release threads simultaneously against a real PostgreSQL instance. They gracefully skip (via `TestAbortedException`) when PostgreSQL is unavailable.
 
-npm install
+## Known Limitations
 
-npm run dev
-```
+1. **No Outbox Pattern**: Database commit and Kafka publish are **not atomic**. A failure between DB commit and Kafka publish can cause saga/event inconsistency. This is a known architectural limitation.
 
----
+2. **Notification deduplication is in-memory**: Uses a `ConcurrentHashMap.newKeySet()` bounded at 50,000 entries. After consumer restart, deduplication state is lost — a rare duplicate email is possible.
 
-# Design Principles
+3. **No service discovery**: Services communicate via hardcoded Docker network hostnames or localhost URLs.
 
-The project follows several engineering principles to keep the codebase maintainable and scalable.
+4. **No API Gateway**: Each service is directly accessible; no centralized routing, rate limiting, or request aggregation.
 
-- Single Responsibility Principle
-- Separation of Concerns
-- Dependency Injection
-- Layered Architecture
-- Stateless Service Design
-- Database Ownership
-- Event-Driven Communication
-- Interface-Based Programming
-- Constructor Injection
-- Clean Package Organization
+5. **No distributed tracing**: Correlation IDs are propagated via HTTP headers but not through Kafka events. The `eventId` and `orderId` in events serve as saga-level correlation.
 
----
+6. **Admin state override**: The order state machine intentionally allows PENDING → SHIPPED and PENDING → DELIVERED transitions for administrative use via the REST `PUT /api/v1/orders/{id}/status` endpoint.
 
-# Engineering Trade-offs
+7. **Default credentials in development**: PostgreSQL password `password` is hardcoded in application.properties for local development. Docker Compose overrides this with environment variables.
 
-Every architectural decision introduces trade-offs. The following choices were made intentionally based on the project's goals.
+## Future Improvements
 
-| Decision | Benefit | Trade-off |
-|----------|---------|-----------|
-| Microservices | Independent deployment and scaling | Increased operational complexity |
-| Apache Kafka | Loose coupling and asynchronous communication | Additional infrastructure to manage |
-| PostgreSQL | Strong consistency and transactional reliability | Vertical scaling is more challenging than some NoSQL solutions |
-| Redis | Low-latency caching and reduced database load | Cache synchronization must be managed |
-| API Gateway | Centralized routing and request handling | Additional network hop |
-| Docker | Consistent environments across development and deployment | Requires container orchestration knowledge |
-
----
-
-# Future Architecture
-
-The current architecture has been designed so that additional enterprise capabilities can be integrated without significant structural changes.
-
-Possible future extensions include:
-
-- Kubernetes Deployment
-- Elasticsearch
-- Distributed Tracing
-- Centralized Logging
-- OAuth2 / OpenID Connect
-- API Rate Limiting
-- CI/CD Pipeline
-- Prometheus & Grafana Monitoring
-- OpenAPI Documentation
-- Service Discovery
-
----
-
-# Learning Outcomes
-
-Building this project demonstrates practical experience with:
-
-- Designing distributed systems
-- Building Spring Boot microservices
-- Implementing event-driven communication
-- REST API development
-- Database design
-- Docker-based development
-- Backend architecture
-- Software engineering best practices
-- Git and GitHub workflow
-- Modular application development
-
----
-
-# License
-
-This project is licensed under the MIT License.
-
-See the `LICENSE` file for additional information.
-
----
-
-# Author
-
-**Devang Thummar**
-
-Backend Developer focused on building scalable Java applications and modern distributed systems.
-
-**GitHub**
-
-https://github.com/devangthummar
-
-**LinkedIn**
-
-https://www.linkedin.com/in/devang-thummar-a98796397
-
----
-
-<p align="center">
-
-Designed and developed with a focus on clean architecture, scalable backend systems, and modern software engineering practices.
-
-</p>
+- Implement Outbox Pattern for DB-Kafka atomicity
+- Add distributed tracing (OpenTelemetry / Zipkin)
+- Implement API Gateway with centralized auth
+- Add service discovery (Eureka / Consul)
+- Implement Kubernetes deployment manifests
+- Add CI/CD pipeline
+- Integrate Debezium for CDC
+- Persistent notification deduplication (database-backed)
+- Add circuit breakers (Resilience4j) for HTTP calls
+- Implement event sourcing for order state history

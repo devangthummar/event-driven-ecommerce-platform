@@ -29,6 +29,10 @@
 
         <mapstruct.version>1.6.2</mapstruct.version>
         <lombok.version>1.18.38</lombok.version>
+        <!-- Newer Mockito/Byte Buddy so unit tests run on JDK 25 (Byte Buddy < 1.15.11
+             cannot instrument classes on JDK 25). Still fully compatible with JDK 17. -->
+        <mockito.version>5.17.0</mockito.version>
+        <byte-buddy.version>1.17.5</byte-buddy.version>
     </properties>
 
     <dependencies>

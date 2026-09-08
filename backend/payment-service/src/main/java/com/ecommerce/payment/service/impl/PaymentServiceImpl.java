@@ -4,18 +4,15 @@ import com.ecommerce.payment.dto.request.CreatePaymentRequest;
 import com.ecommerce.payment.dto.request.ProcessPaymentRequest;
 import com.ecommerce.payment.dto.response.PaymentResponse;
 import com.ecommerce.payment.entity.Payment;
-import com.ecommerce.payment.entity.enums.PaymentMethod;
 import com.ecommerce.payment.entity.enums.PaymentStatus;
 import com.ecommerce.payment.event.PaymentRequestEvent;
 import com.ecommerce.payment.exception.PaymentNotFoundException;
 import com.ecommerce.payment.mapper.PaymentMapper;
 import com.ecommerce.payment.repository.PaymentRepository;
 import com.ecommerce.payment.service.PaymentService;
-import com.ecommerce.payment.service.WalletService;
-import org.springframework.dao.DataIntegrityViolationException;
-import org.springframework.transaction.annotation.Transactional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
@@ -28,7 +25,7 @@ public class PaymentServiceImpl implements PaymentService {
 
     private final PaymentRepository paymentRepository;
     private final PaymentMapper paymentMapper;
-    private final WalletService walletService;
+    private final PaymentTransactionService paymentTransactionService;
 
     @Override
     public PaymentResponse createPayment(CreatePaymentRequest request) {
@@ -59,70 +56,41 @@ public class PaymentServiceImpl implements PaymentService {
                 .orElseThrow(() ->
                         new PaymentNotFoundException(
                                 "Payment not found for transaction ID: "
-                                        + transactionId
-                        ));
+                                        + transactionId));
 
         return paymentMapper.toPaymentResponse(payment);
     }
 
-
-    @Transactional
+    /**
+     * Processes an existing payment (REST path). Delegates to a dedicated
+     * REQUIRES_NEW transaction so the pessimistic lock is held for the whole
+     * debit-and-settle unit of work.
+     */
     @Override
     public PaymentResponse processPayment(ProcessPaymentRequest request) {
-
-        Payment payment = paymentRepository
-                .findByTransactionId(request.getTransactionId())
-                .orElseThrow(() ->
-                        new PaymentNotFoundException(
-                                "Payment not found for transaction ID: "
-                                        + request.getTransactionId()
-                        ));
-
-        if (payment.getPaymentStatus() == PaymentStatus.SUCCESS) {
-            return paymentMapper.toPaymentResponse(payment);
-        }
-
-        try {
-
-            walletService.deductBalance(
-                    payment.getUserId(),
-                    payment.getAmount()
-            );
-
-            payment.setPaymentStatus(PaymentStatus.SUCCESS);
-
-        } catch (RuntimeException exception) {
-
-
-            payment.setPaymentStatus(PaymentStatus.FAILED);
-        }
-
-        payment.setUpdatedAt(LocalDateTime.now());
-
-        Payment savedPayment = paymentRepository.save(payment);
-
-        return paymentMapper.toPaymentResponse(savedPayment);
+        return paymentTransactionService.processPending(request.getTransactionId());
     }
 
     /**
      * Idempotent payment processing for Kafka at-least-once delivery.
      *
-     * ASSUMPTION: No duplicate orderId records exist in the database before this
-     * migration is applied. The UNIQUE constraint on orderId in the payments table
-     * enforces this going forward.
+     * <p>No transaction is held on this orchestrator. Every state mutation runs in its
+     * own {@code REQUIRES_NEW} transaction inside {@link PaymentTransactionService}, so
+     * a duplicate that loses the UNIQUE(orderId) insert race fails and rolls back in
+     * isolation and is then re-resolved against the winner's committed row. A duplicate
+     * therefore never re-debits the wallet and never surfaces as a false failure.
      *
      * Flow:
-     *   1. Check if payment exists by orderId
-     *   2. If exists with SUCCESS/FAILED status -> return existing result (idempotent)
-     *   3. If exists with PENDING status -> proceed to processPayment()
-     *   4. If NOT exists -> create payment, then processPayment()
+     *   1. Existing SUCCESS/FAILED payment  -> return it (idempotent)
+     *   2. Existing PENDING payment          -> process it in a new transaction
+     *   3. No payment                        -> create + process in one new transaction;
+     *      on unique-constraint race, re-resolve the winner's committed state.
      */
-    @Transactional
+    @Override
     public PaymentResponse processPaymentIdempotent(PaymentRequestEvent event) {
 
         log.info("Idempotent payment processing for orderId={}", event.getOrderId());
 
-        // Step 1: Check if payment already exists for this orderId
         var existingPayment = paymentRepository.findByOrderId(event.getOrderId());
 
         if (existingPayment.isPresent()) {
@@ -130,75 +98,38 @@ public class PaymentServiceImpl implements PaymentService {
             log.info("Payment already exists for orderId={}, status={}",
                     event.getOrderId(), payment.getPaymentStatus());
 
-            // Step 2a: If SUCCESS -> return existing result (idempotent)
+            // Step 2a: SUCCESS -> return existing result (idempotent)
             if (payment.getPaymentStatus() == PaymentStatus.SUCCESS) {
                 log.info("Returning existing SUCCESS payment for orderId={}", event.getOrderId());
                 return paymentMapper.toPaymentResponse(payment);
             }
 
-            // Step 2b: If FAILED -> return existing result (idempotent)
+            // Step 2b: FAILED -> return existing result (idempotent)
             if (payment.getPaymentStatus() == PaymentStatus.FAILED) {
                 log.info("Returning existing FAILED payment for orderId={}", event.getOrderId());
                 return paymentMapper.toPaymentResponse(payment);
             }
 
-            // Step 2c: If PENDING -> process it (was created but not yet processed)
+            // Step 2c: PENDING -> process it (was created but not yet processed)
             if (payment.getPaymentStatus() == PaymentStatus.PENDING) {
                 log.info("Processing existing PENDING payment for orderId={}, transactionId={}",
                         event.getOrderId(), payment.getTransactionId());
-                ProcessPaymentRequest processRequest = ProcessPaymentRequest.builder()
-                        .transactionId(payment.getTransactionId())
-                        .build();
-                return processPayment(processRequest);
+                return paymentTransactionService.processPending(payment.getTransactionId());
             }
         }
 
-        // Step 3: No existing payment -> create and process
-        // Try-Catch-Retry: if another thread raced ahead and inserted the same orderId,
-        // createPayment() will throw DataIntegrityViolationException due to the UNIQUE
-        // constraint on orderId. We catch that, re-fetch the existing record, and act on it.
+        // Step 3: No existing payment -> claim-and-settle in ONE new transaction. If a
+        // concurrent event raced ahead and inserted the same orderId, the insert fails
+        // the unique constraint and rolls back cleanly; resolve the winner's committed
+        // state instead of trying to continue inside the failed transaction.
         log.info("No existing payment for orderId={}. Creating new payment...", event.getOrderId());
-        CreatePaymentRequest createRequest = CreatePaymentRequest.builder()
-                .orderId(event.getOrderId())
-                .userId(event.getUserId())
-                .amount(event.getAmount())
-                .paymentMethod(PaymentMethod.valueOf(event.getPaymentMethod()))
-                .build();
 
         try {
-
-            PaymentResponse createdPayment = createPayment(createRequest);
-
-            ProcessPaymentRequest processRequest = ProcessPaymentRequest.builder()
-                    .transactionId(createdPayment.getTransactionId())
-                    .build();
-
-            return processPayment(processRequest);
-
+            return paymentTransactionService.createAndProcess(event);
         } catch (DataIntegrityViolationException ex) {
-            // Race condition: another thread/process already created the payment record
-            // for this orderId. Re-fetch it and act on its current state.
-            log.warn("Race condition detected for orderId={}. Re-fetching existing payment.",
-                    event.getOrderId());
-
-            Payment racePayment = paymentRepository.findByOrderId(event.getOrderId())
-                    .orElseThrow(() -> new RuntimeException(
-                            "Payment disappeared after constraint violation for orderId="
-                                    + event.getOrderId()));
-
-            if (racePayment.getPaymentStatus() == PaymentStatus.PENDING) {
-                log.info("Re-fetched PENDING payment for orderId={}, processing...",
-                        event.getOrderId());
-                ProcessPaymentRequest retryRequest = ProcessPaymentRequest.builder()
-                        .transactionId(racePayment.getTransactionId())
-                        .build();
-                return processPayment(retryRequest);
-            }
-
-            // Already SUCCESS or FAILED — return as-is (idempotent)
-            log.info("Re-fetched {} payment for orderId={}, returning existing result.",
-                    racePayment.getPaymentStatus(), event.getOrderId());
-            return paymentMapper.toPaymentResponse(racePayment);
+            log.warn("Race condition detected for orderId={} (unique constraint). "
+                    + "Re-resolving the committed payment.", event.getOrderId());
+            return paymentTransactionService.resolveExisting(event.getOrderId());
         }
     }
 }

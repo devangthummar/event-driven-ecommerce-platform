@@ -23,8 +23,7 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
-
-@Service
+import org.springframework.transaction.annotation.Transactional;@Service
 @RequiredArgsConstructor
 public class UserServiceImpl implements UserService {
 
@@ -36,10 +35,15 @@ public class UserServiceImpl implements UserService {
     private final AuthenticationManager authenticationManager;
     private final UserMapper userMapper;
 
-
+    /**
+     * The {@code users.email} UNIQUE constraint is the real guard against duplicate
+     * registrations. The {@code existsByEmail} pre-check only avoids paying the cost of a
+     * doomed insert; if two concurrent requests race past it, the loser's insert fails
+     * the constraint and is translated into the same domain exception as the pre-check.
+     */
     @Override
+    @Transactional
     public UserResponse registerUser(RegisterRequest request) {
-
 
         if (userRepository.existsByEmail(request.getEmail())) {
             throw new EmailAlreadyExistsException("Email already exists");
@@ -47,12 +51,22 @@ public class UserServiceImpl implements UserService {
 
         User user = userMapper.toEntity(request, passwordEncoder);
 
-        User savedUser = userRepository.save(user);
-
-        return userMapper.toResponse(savedUser);
+        try {
+            User savedUser = userRepository.save(user);
+            return userMapper.toResponse(savedUser);
+        } catch (org.springframework.dao.DataIntegrityViolationException e) {
+            // Concurrent registration with the same email (or another unique-column
+            // conflict). Report the email conflict only when it is actually the cause;
+            // otherwise rethrow so unrelated constraint problems stay visible.
+            if (userRepository.existsByEmail(request.getEmail())) {
+                throw new EmailAlreadyExistsException("Email already exists");
+            }
+            throw e;
+        }
     }
 
     @Override
+    @Transactional
     public LoginResponse login(LoginRequest request) {
 
         Authentication authentication =
@@ -76,6 +90,7 @@ public class UserServiceImpl implements UserService {
 
     }
     @Override
+    @Transactional(readOnly = true)
     public UserResponse getCurrentUser() {
 
         Authentication authentication =
@@ -94,6 +109,7 @@ public class UserServiceImpl implements UserService {
     }
 
     @Override
+    @Transactional
     public UserResponse updateProfile(UpdateProfileRequest request) {
 
         Authentication authentication =
@@ -118,6 +134,7 @@ public class UserServiceImpl implements UserService {
     }
 
     @Override
+    @Transactional
     public void changePassword(ChangePasswordRequest request) {
 
         Authentication authentication =

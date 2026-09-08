@@ -13,4 +13,6 @@ public interface ReservationRepository extends JpaRepository<Reservation, Long> 
 
     Optional<Reservation> findByOrderIdAndProductIdAndStatus(Long orderId, Long productId, ReservationStatus status);
 
+    boolean existsByOrderIdAndProductId(Long orderId, Long productId);
+
 }

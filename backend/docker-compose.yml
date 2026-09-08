@@ -95,7 +95,8 @@ services:
       SPRING_DATASOURCE_PASSWORD: password
       JWT_PRIVATE_KEY_PATH: /app/keys/jwt-private.pem
     volumes:
-      - ./keys:/app/keys:ro
+      # Only the SIGNING (private) key is needed here — it must never reach other services.
+      - ./keys/jwt-private.pem:/app/keys/jwt-private.pem:ro
     depends_on:
       postgres:
         condition: service_healthy
@@ -115,6 +116,11 @@ services:
       SPRING_DATASOURCE_PASSWORD: password
       SPRING_DATA_REDIS_HOST: redis
       SPRING_DATA_REDIS_PORT: 6379
+      JWT_PUBLIC_KEY_PATH: /app/keys/jwt-public.pem
+      JWT_ISSUER: user-service
+    volumes:
+      # Validation services need ONLY the public key; the private key stays out of their containers.
+      - ./keys/jwt-public.pem:/app/keys/jwt-public.pem:ro
     depends_on:
       postgres:
         condition: service_healthy
@@ -137,8 +143,10 @@ services:
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9093
       JWT_PUBLIC_KEY_PATH: /app/keys/jwt-public.pem
       JWT_ISSUER: user-service
+      # Order Service resolves Product Service through the docker network
+      PRODUCT_SERVICE_URL: http://product-service:8081
     volumes:
-      - ./keys:/app/keys:ro
+      - ./keys/jwt-public.pem:/app/keys/jwt-public.pem:ro
     depends_on:
       postgres:
         condition: service_healthy
@@ -162,7 +170,7 @@ services:
       JWT_PUBLIC_KEY_PATH: /app/keys/jwt-public.pem
       JWT_ISSUER: user-service
     volumes:
-      - ./keys:/app/keys:ro
+      - ./keys/jwt-public.pem:/app/keys/jwt-public.pem:ro
     depends_on:
       postgres:
         condition: service_healthy
@@ -186,7 +194,7 @@ services:
       JWT_PUBLIC_KEY_PATH: /app/keys/jwt-public.pem
       JWT_ISSUER: user-service
     volumes:
-      - ./keys:/app/keys:ro
+      - ./keys/jwt-public.pem:/app/keys/jwt-public.pem:ro
     depends_on:
       postgres:
         condition: service_healthy

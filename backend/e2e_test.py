@@ -250,10 +250,11 @@ def test_create_product():
         "imageUrl": "https://example.com/iphone15.jpg"
     }
 
+    # Product Service now requires a valid user JWT (service-to-service security).
     status, body, err = safe_request(
         "POST",
         f"{BASE_URLS['product']}/api/products",
-        headers={"Content-Type": "application/json"},
+        headers=get_auth_headers(),
         json_data=product_data
     )
 
@@ -357,7 +358,7 @@ def verify_entities():
     print("\n>>> VERIFY: Fetching created entities...")
 
     if product_id:
-        status, body, err = safe_request("GET", f"{BASE_URLS['product']}/api/products/{product_id}")
+        status, body, err = safe_request("GET", f"{BASE_URLS['product']}/api/products/{product_id}", headers=get_auth_headers())
         print(f"  GET Product (id={product_id}): {status}")
         if status == 200 and body:
             print(f"    Name: {body.get('name')}, Price: {body.get('price')}")

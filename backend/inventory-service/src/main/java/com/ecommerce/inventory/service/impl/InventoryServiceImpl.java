@@ -13,11 +13,10 @@ import com.ecommerce.inventory.mapper.InventoryMapper;
 import com.ecommerce.inventory.repository.InventoryRepository;
 import com.ecommerce.inventory.repository.ReservationRepository;
 import com.ecommerce.inventory.service.InventoryService;
-import jakarta.persistence.OptimisticLockException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
@@ -70,7 +69,12 @@ public class InventoryServiceImpl implements InventoryService {
 
     }
 
+    /**
+     * Adds stock to an existing inventory. The read of the current quantity and the
+     * subsequent update are wrapped in a single transaction so the operation is atomic.
+     */
     @Override
+    @Transactional
     public InventoryResponse addStock(StockRequest request) {
 
         Inventory inventory = inventoryRepository
@@ -94,16 +98,44 @@ public class InventoryServiceImpl implements InventoryService {
 
         return inventoryMapper.toInventoryResponse(updatedInventory);
 
-    }    @Override
+    }
+
+    /**
+     * Reserves stock for one order/product pair. The inventory row is read with a
+     * pessimistic (FOR UPDATE) lock so concurrent reservations of the same product are
+     * serialized by the database:
+     *
+     * <ul>
+     *   <li>a racing duplicate OrderCreatedEvent for the same order+product blocks on the
+     *       lock, then observes the winner's committed reservation via the idempotency
+     *       check below and skips — it can never double-decrement or fail the order;</li>
+     *   <li>two different orders reserving the same product concurrently both re-read the
+     *       fresh stock after the lock wait, so an order is only rejected when the stock
+     *       is genuinely insufficient (no optimistic-lock false failures).</li>
+     * </ul>
+     */
+    @Override
     @Transactional
     public InventoryResponse reserveStock(ReserveStockRequest request) {
 
+        // Lock the inventory row FIRST so the duplicate check and the stock check below
+        // run against the latest committed state (serialized with other reservations).
         Inventory inventory = inventoryRepository
-                .findByProductId(request.getProductId())
+                .findByProductIdForUpdate(request.getProductId())
                 .orElseThrow(() ->
                         new InventoryNotFoundException(
                                 "Inventory not found."
                         ));
+
+        // Idempotency guard for Kafka at-least-once delivery: an order/product pair
+        // is reserved exactly once. If OrderCreatedEvent is redelivered (producer
+        // retry, consumer rebalance after partial failure), do NOT reserve again.
+        if (reservationRepository.existsByOrderIdAndProductId(
+                request.getOrderId(), request.getProductId())) {
+            log.info("Reservation already exists for orderId={}, productId={}. Skipping duplicate reservation (idempotent).",
+                    request.getOrderId(), request.getProductId());
+            return inventoryMapper.toInventoryResponse(inventory);
+        }
 
         if (inventory.getAvailableQuantity() < request.getQuantity()) {
 
@@ -123,31 +155,28 @@ public class InventoryServiceImpl implements InventoryService {
 
         inventory.setLastUpdated(LocalDateTime.now());
 
-        try {
-            Inventory updatedInventory = inventoryRepository.save(inventory);
+        Inventory updatedInventory = inventoryRepository.save(inventory);
 
-            Reservation reservation = Reservation.builder()
-                    .orderId(request.getOrderId())
-                    .productId(request.getProductId())
-                    .quantity(request.getQuantity())
-                    .status(ReservationStatus.RESERVED)
-                    .createdAt(LocalDateTime.now())
-                    .build();
+        Reservation reservation = Reservation.builder()
+                .orderId(request.getOrderId())
+                .productId(request.getProductId())
+                .quantity(request.getQuantity())
+                .status(ReservationStatus.RESERVED)
+                .createdAt(LocalDateTime.now())
+                .build();
 
-            reservationRepository.save(reservation);
+        reservationRepository.save(reservation);
 
-            return inventoryMapper.toInventoryResponse(updatedInventory);
-
-        } catch (ObjectOptimisticLockingFailureException | OptimisticLockException e) {
-            log.warn("Optimistic locking failure during stock reservation for productId={}. Concurrent modification detected.",
-                    request.getProductId());
-            throw new InsufficientStockException(
-                    "Stock reservation failed due to concurrent modification. Please retry."
-            );
-        }
+        return inventoryMapper.toInventoryResponse(updatedInventory);
     }
 
+    /**
+     * Releases previously reserved stock back to available. The read-check-update cycle
+     * runs in a single transaction so the reservation cannot be released twice
+     * concurrently via a stale read.
+     */
     @Override
+    @Transactional
     public InventoryResponse releaseReservedStock(ReserveStockRequest request) {
 
         Inventory inventory = inventoryRepository
@@ -179,7 +208,12 @@ public class InventoryServiceImpl implements InventoryService {
 
         return inventoryMapper.toInventoryResponse(updatedInventory);
 
-    }    @Override
+    }    /**
+     * Confirms a reservation by converting reserved stock into total (sold) stock. The
+     * read-check-update cycle runs in a single transaction.
+     */
+    @Override
+    @Transactional
     public InventoryResponse confirmReservedStock(ReserveStockRequest request) {
 
         Inventory inventory = inventoryRepository
@@ -210,8 +244,18 @@ public class InventoryServiceImpl implements InventoryService {
         Inventory updatedInventory = inventoryRepository.save(inventory);
 
         return inventoryMapper.toInventoryResponse(updatedInventory);
+
     }
 
+    /**
+     * Saga compensation: releases every still-RESERVED reservation of the order inside a
+     * single transaction. Each inventory row is locked FOR UPDATE so a concurrent
+     * reservation of the same product (a different order) cannot interleave a stale
+     * read between the compensation's check and its update.
+     *
+     * <p>Idempotent: a duplicate OrderCancelledEvent finds no RESERVED rows and is a
+     * no-op; CONFIRMED rows are never released by compensation.
+     */
     @Override
     @Transactional
     public void releaseStockForOrder(Long orderId) {
@@ -227,7 +271,7 @@ public class InventoryServiceImpl implements InventoryService {
         for (Reservation reservation : reservations) {
 
             Inventory inventory = inventoryRepository
-                    .findByProductId(reservation.getProductId())
+                    .findByProductIdForUpdate(reservation.getProductId())
                     .orElseThrow(() ->
                             new InventoryNotFoundException(
                                     "Inventory not found for productId=" + reservation.getProductId()

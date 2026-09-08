@@ -10,7 +10,15 @@ import java.util.ArrayList;
 import java.util.List;
 
 @Entity
-@Table(name = "orders")
+@Table(
+        name = "orders",
+        uniqueConstraints = {
+                @UniqueConstraint(
+                        name = "uk_orders_user_idempotency",
+                        columnNames = {"user_id", "idempotency_key"}
+                )
+        }
+)
 @Getter
 @Setter
 @NoArgsConstructor
@@ -27,6 +35,16 @@ public class Order {
 
     @Column(nullable = false, unique = true)
     private String orderNumber;
+
+    /**
+     * Client-supplied idempotency key. Together with {@code userId} it is UNIQUE: a
+     * client retry carrying the same key for the same user returns the original order
+     * instead of creating a duplicate, and the same key can never be reused across
+     * different users. Nullable so legacy callers that do not send a key keep the
+     * pre-existing (non-idempotent) behavior.
+     */
+    @Column(name = "idempotency_key")
+    private String idempotencyKey;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
