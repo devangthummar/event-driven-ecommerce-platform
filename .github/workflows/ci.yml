@@ -31,6 +31,20 @@ jobs:
   backend:
     name: Backend (${{ matrix.service }})
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
     strategy:
       fail-fast: false
       matrix:
@@ -58,19 +72,21 @@ jobs:
           cache: maven
           cache-dependency-path: backend/${{ matrix.service }}/pom.xml
 
+      - name: Create test databases
+        run: |
+          PGPASSWORD=password psql -h localhost -U postgres -c "CREATE DATABASE order_test_db;" || true
+          PGPASSWORD=password psql -h localhost -U postgres -c "CREATE DATABASE inventory_test_db;" || true
+          PGPASSWORD=password psql -h localhost -U postgres -c "CREATE DATABASE payment_test_db;" || true
+
       - name: Make Maven wrapper executable
         run: chmod +x mvnw
 
       - name: Compile
         run: ./mvnw compile -q --no-transfer-progress
 
-      # Run unit tests, excluding integration tests that require real PostgreSQL.
-      # These tests use @TestPropertySource to override to PostgreSQL and
-      # @SpringBootTest cannot start without a real database.
-      - name: Run unit tests
-        run: >-
-          ./mvnw test -q --no-transfer-progress
-          -Dtest='!*ConcurrencyIntegrationTest'
+      # Run all 114 unit and integration tests (including DB-backed concurrency tests)
+      - name: Run all tests
+        run: ./mvnw test -q --no-transfer-progress
 
       - name: Upload test results
         if: always()
@@ -261,17 +277,17 @@ jobs:
         run: |
           echo "Waiting for user-service..."
           for i in $(seq 1 30); do
-            docker compose exec -T user-service wget -q -O /dev/null http://localhost:8006/api/users/register 2>/dev/null && break
+            docker compose exec -T user-service wget -q -O /dev/null http://localhost:8006/actuator/health 2>/dev/null && break
             sleep 3
           done
           echo "Waiting for product-service..."
           for i in $(seq 1 30); do
-            docker compose exec -T product-service wget -q -O /dev/null http://localhost:8081/api/products 2>/dev/null && break
+            docker compose exec -T product-service wget -q -O /dev/null http://localhost:8081/actuator/health 2>/dev/null && break
             sleep 3
           done
           echo "Waiting for order-service..."
           for i in $(seq 1 30); do
-            docker compose exec -T order-service wget -q -O /dev/null http://localhost:8082/api/v1/orders 2>/dev/null && break
+            docker compose exec -T order-service wget -q -O /dev/null http://localhost:8082/actuator/health 2>/dev/null && break
             sleep 3
           done
           echo "Backend services ready."

@@ -238,22 +238,20 @@ All concurrency tests use `ExecutorService` + `CyclicBarrier` to release threads
 
 3. **No service discovery**: Services communicate via hardcoded Docker network hostnames or localhost URLs.
 
-4. **No API Gateway**: Each service is directly accessible; no centralized routing, rate limiting, or request aggregation.
+4. **Nginx Reverse Proxy / Gateway Rate Limiting**: Nginx provides reverse proxy routing and endpoint protection with rate limiting (`auth_limit` 5 req/s for login/register, `order_limit` 10 req/s for orders, `api_limit` 30 req/s for general APIs, returning HTTP 429 on overflow).
 
-5. **No distributed tracing**: Correlation IDs are propagated via HTTP headers but not through Kafka events. The `eventId` and `orderId` in events serve as saga-level correlation.
+5. **No distributed tracing framework**: Correlation IDs (`X-Correlation-Id`) are propagated via HTTP headers and MDC logging across services, but full distributed tracing (OpenTelemetry/Zipkin) is omitted to avoid unnecessary infrastructure bloat.
 
 6. **Admin state override**: The order state machine intentionally allows PENDING → SHIPPED and PENDING → DELIVERED transitions for administrative use via the REST `PUT /api/v1/orders/{id}/status` endpoint.
 
-7. **Default credentials in development**: PostgreSQL password `password` is hardcoded in application.properties for local development. Docker Compose overrides this with environment variables.
+7. **Default credentials in development**: PostgreSQL password `password` is used in application.properties for local development. Docker Compose and production configurations override this with environment variables (`POSTGRES_PASSWORD`).
 
 ## Future Improvements
 
 - Implement Outbox Pattern for DB-Kafka atomicity
 - Add distributed tracing (OpenTelemetry / Zipkin)
-- Implement API Gateway with centralized auth
 - Add service discovery (Eureka / Consul)
 - Implement Kubernetes deployment manifests
-- Add CI/CD pipeline
 - Integrate Debezium for CDC
 - Persistent notification deduplication (database-backed)
 - Add circuit breakers (Resilience4j) for HTTP calls

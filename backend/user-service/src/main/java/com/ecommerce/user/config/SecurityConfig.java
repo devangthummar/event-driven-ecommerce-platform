@@ -69,6 +69,9 @@ public class SecurityConfig {
                 .csrf(csrf -> csrf.disable())
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(
+                                // Actuator health check
+                                "/actuator/health",
+                                "/actuator/health/**",
                                 // Public auth endpoints
                                 "/api/auth/register",
                                 "/api/auth/login",

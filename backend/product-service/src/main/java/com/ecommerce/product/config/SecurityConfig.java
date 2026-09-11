@@ -67,6 +67,8 @@ public class SecurityConfig {
         http
                 .csrf(csrf -> csrf.disable())
                 .authorizeHttpRequests(auth -> auth
+                        // Actuator health check endpoint
+                        .requestMatchers("/actuator/health", "/actuator/health/**").permitAll()
                         // Catalog reads are available to any authenticated user.
                         // Mutations (create/update/delete) are ADMIN-only: the JWT role
                         // claim carries ROLE_ADMIN/ROLE_USER, matching User Service.
