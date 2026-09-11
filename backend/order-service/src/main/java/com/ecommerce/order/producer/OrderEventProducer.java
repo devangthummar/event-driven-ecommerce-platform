@@ -2,6 +2,7 @@ package com.ecommerce.order.producer;
 
 import com.ecommerce.order.event.OrderCancelledEvent;
 import com.ecommerce.order.event.OrderCreatedEvent;
+import com.ecommerce.order.outbox.OutboxService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.core.KafkaTemplate;
@@ -17,14 +18,19 @@ public class OrderEventProducer {
 
     private final KafkaTemplate<String, OrderCreatedEvent> orderCreatedKafkaTemplate;
     private final KafkaTemplate<String, OrderCancelledEvent> orderCancelledKafkaTemplate;
+    private final OutboxService outboxService;
 
     public void publishOrderCreatedEvent(OrderCreatedEvent event) {
-        log.info("Publishing OrderCreatedEvent to topic [{}]: orderId={}", ORDER_EVENTS_TOPIC, event.getOrderId());
+        log.info("Publishing OrderCreatedEvent via Outbox & Kafka: orderId={}", event.getOrderId());
+        outboxService.saveToOutbox("ORDER", event.getOrderId().toString(), "OrderCreatedEvent",
+                ORDER_EVENTS_TOPIC, event.getOrderId().toString(), event);
         orderCreatedKafkaTemplate.send(ORDER_EVENTS_TOPIC, event.getOrderId().toString(), event);
     }
 
     public void publishOrderCancelledEvent(OrderCancelledEvent event) {
-        log.info("Publishing OrderCancelledEvent to topic [{}]: orderId={}", ORDER_CANCELLED_EVENTS_TOPIC, event.getOrderId());
+        log.info("Publishing OrderCancelledEvent via Outbox & Kafka: orderId={}", event.getOrderId());
+        outboxService.saveToOutbox("ORDER", event.getOrderId().toString(), "OrderCancelledEvent",
+                ORDER_CANCELLED_EVENTS_TOPIC, event.getOrderId().toString(), event);
         orderCancelledKafkaTemplate.send(ORDER_CANCELLED_EVENTS_TOPIC, event.getOrderId().toString(), event);
     }
 }

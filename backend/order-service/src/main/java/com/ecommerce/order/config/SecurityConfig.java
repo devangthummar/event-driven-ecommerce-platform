@@ -50,7 +50,7 @@ public class SecurityConfig {
         http
                 .csrf(csrf -> csrf.disable())
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/actuator/health", "/actuator/health/**").permitAll()
+                        .requestMatchers("/actuator/health", "/actuator/health/**", "/actuator/prometheus", "/actuator/prometheus/**").permitAll()
                         .anyRequest().authenticated()
                 )
                 .sessionManagement(session ->

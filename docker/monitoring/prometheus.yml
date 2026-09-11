@@ -1,0 +1,17 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: 'ecommerce-microservices'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets:
+          - 'user-service:8006'
+          - 'product-service:8081'
+          - 'order-service:8082'
+          - 'inventory-service:8084'
+          - 'payment-service:8085'
+          - 'notification-service:8086'
+        labels:
+          environment: 'production'

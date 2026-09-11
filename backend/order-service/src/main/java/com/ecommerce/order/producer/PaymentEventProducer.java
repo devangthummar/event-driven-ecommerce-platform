@@ -1,6 +1,7 @@
 package com.ecommerce.order.producer;
 
 import com.ecommerce.order.event.PaymentRequestEvent;
+import com.ecommerce.order.outbox.OutboxService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.core.KafkaTemplate;
@@ -14,11 +15,13 @@ public class PaymentEventProducer {
     private static final String PAYMENT_COMMANDS_TOPIC = "payment-commands";
 
     private final KafkaTemplate<String, PaymentRequestEvent> kafkaTemplate;
+    private final OutboxService outboxService;
 
     public void publishPaymentRequestEvent(PaymentRequestEvent event) {
-        log.info("Publishing PaymentRequestEvent to topic [{}]: orderId={}, amount={}",
-                PAYMENT_COMMANDS_TOPIC, event.getOrderId(), event.getAmount());
+        log.info("Publishing PaymentRequestEvent via Outbox & Kafka: orderId={}, amount={}",
+                event.getOrderId(), event.getAmount());
+        outboxService.saveToOutbox("PAYMENT_REQUEST", event.getOrderId().toString(), "PaymentRequestEvent",
+                PAYMENT_COMMANDS_TOPIC, event.getOrderId().toString(), event);
         kafkaTemplate.send(PAYMENT_COMMANDS_TOPIC, event.getOrderId().toString(), event);
     }
-
 }

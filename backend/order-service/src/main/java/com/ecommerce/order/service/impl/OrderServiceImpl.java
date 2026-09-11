@@ -51,6 +51,7 @@ public class OrderServiceImpl implements OrderService {
 
 
     @Override
+    @Transactional
     public OrderResponse createOrder(CreateOrderRequest request) {
 
         // Idempotency replay: same authenticated-scope user (request.userId is the
