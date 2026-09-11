@@ -42,4 +42,20 @@ public class OutboxService {
             throw new RuntimeException("Outbox serialization failure", e);
         }
     }
+
+    @Transactional
+    public int retryFailedOutboxMessages() {
+        var failedMessages = outboxRepository.findByStatus(OutboxStatus.FAILED);
+        if (failedMessages.isEmpty()) {
+            log.info("No FAILED outbox messages found to retry");
+            return 0;
+        }
+        for (OutboxMessage msg : failedMessages) {
+            msg.setStatus(OutboxStatus.PENDING);
+            msg.setRetryCount(0);
+            outboxRepository.save(msg);
+        }
+        log.info("Successfully reset {} FAILED outbox messages to PENDING for reprocessing", failedMessages.size());
+        return failedMessages.size();
+    }
 }

@@ -11,4 +11,6 @@ public interface OutboxRepository extends JpaRepository<OutboxMessage, Long> {
     List<OutboxMessage> findTop50ByStatusOrderByCreatedAtAsc(OutboxStatus status);
 
     List<OutboxMessage> findByAggregateIdAndTopic(String aggregateId, String topic);
+
+    List<OutboxMessage> findByStatus(OutboxStatus status);
 }
