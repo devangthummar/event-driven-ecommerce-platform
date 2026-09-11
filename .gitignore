@@ -1,16 +1,26 @@
+# ==========================================
 # Compiled class file
+# ==========================================
 *.class
 
+# ==========================================
 # Log file
+# ==========================================
 *.log
 
+# ==========================================
 # BlueJ files
+# ==========================================
 *.ctxt
 
+# ==========================================
 # Mobile Tools for Java (J2ME)
+# ==========================================
 .mtj.tmp/
 
-# Package Files #
+# ==========================================
+# Package Files
+# ==========================================
 *.jar
 *.war
 *.nar
@@ -19,7 +29,9 @@
 *.tar.gz
 *.rar
 
-# virtual machine crash logs, see http://www.java.com/en/download/help/error_hotspot.xml
+# ==========================================
+# Virtual machine crash logs
+# ==========================================
 hs_err_pid*
 replay_pid*
 
@@ -39,3 +51,51 @@ backend/backup/
 # ==========================================
 tmp_manual_e2e.py
 backend/scripts/diagnose_opencode.py
+
+# ==========================================
+# SECURITY — Secrets and credentials
+# ==========================================
+# Environment files (may contain real secrets)
+.env
+.env.local
+.env.production
+.env.*.local
+# Keep .env.example and .env.development tracked
+!.env.example
+!.env.development
+
+# JWT / RSA private and public keys
+keys/
+*.pem
+*.key
+
+# ==========================================
+# IDE / Editor
+# ==========================================
+.idea/
+*.iws
+*.iml
+*.ipr
+.vscode/
+
+# ==========================================
+# OS
+# ==========================================
+.DS_Store
+Thumbs.db
+
+# ==========================================
+# Reports (generated, not source)
+# ==========================================
+*_REPORT.md
+*_LOG.md
+TEST_RESULTS_*.md
+INITIAL_STATE_REPORT.md
+
+# ==========================================
+# Build artifacts
+# ==========================================
+target/
+build/
+dist/
+node_modules/

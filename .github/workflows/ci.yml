@@ -1,0 +1,323 @@
+# ============================================
+# CI Pipeline — Event-Driven E-Commerce Platform
+# ============================================
+# Triggers on pushes to main and all pull requests.
+# Validates: backend tests, frontend lint+build, Docker images, compose config.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  JAVA_VERSION: '17'
+  NODE_VERSION: '20'
+
+# ============================================
+# Jobs
+# ============================================
+jobs:
+
+  # ------------------------------------------
+  # Backend — Matrix build & test for all 6 services
+  # ------------------------------------------
+  backend:
+    name: Backend (${{ matrix.service }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        service:
+          - user-service
+          - product-service
+          - order-service
+          - inventory-service
+          - payment-service
+          - notification-service
+
+    defaults:
+      run:
+        working-directory: backend/${{ matrix.service }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: temurin
+          cache: maven
+          cache-dependency-path: backend/${{ matrix.service }}/pom.xml
+
+      - name: Make Maven wrapper executable
+        run: chmod +x mvnw
+
+      - name: Compile
+        run: ./mvnw compile -q --no-transfer-progress
+
+      # Run unit tests, excluding integration tests that require real PostgreSQL.
+      # These tests use @TestPropertySource to override to PostgreSQL and
+      # @SpringBootTest cannot start without a real database.
+      - name: Run unit tests
+        run: >-
+          ./mvnw test -q --no-transfer-progress
+          -Dtest='!*ConcurrencyIntegrationTest'
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-${{ matrix.service }}
+          path: backend/${{ matrix.service }}/target/surefire-reports/
+          retention-days: 7
+          if-no-files-found: ignore
+
+  # ------------------------------------------
+  # Frontend — Install, lint, build
+  # ------------------------------------------
+  frontend:
+    name: Frontend (lint + build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Build production bundle
+        run: npm run build
+
+  # ------------------------------------------
+  # Docker — Build all images + validate compose
+  # ------------------------------------------
+  docker:
+    name: Docker (build + compose validate)
+    runs-on: ubuntu-latest
+    needs: [backend, frontend]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # --- Build backend images ---
+      - name: Build user-service image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./backend/user-service
+          file: ./backend/user-service/Dockerfile
+          push: false
+          tags: ecommerce/user-service:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=min
+
+      - name: Build product-service image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./backend/product-service
+          file: ./backend/product-service/Dockerfile
+          push: false
+          tags: ecommerce/product-service:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=min
+
+      - name: Build order-service image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./backend/order-service
+          file: ./backend/order-service/Dockerfile
+          push: false
+          tags: ecommerce/order-service:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=min
+
+      - name: Build inventory-service image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./backend/inventory-service
+          file: ./backend/inventory-service/Dockerfile
+          push: false
+          tags: ecommerce/inventory-service:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=min
+
+      - name: Build payment-service image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./backend/payment-service
+          file: ./backend/payment-service/Dockerfile
+          push: false
+          tags: ecommerce/payment-service:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=min
+
+      - name: Build notification-service image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./backend/notification-service
+          file: ./backend/notification-service/Dockerfile
+          push: false
+          tags: ecommerce/notification-service:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=min
+
+      # --- Build frontend image ---
+      - name: Build frontend image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./frontend
+          file: ./frontend/Dockerfile
+          push: false
+          tags: ecommerce/frontend:ci
+          build-args: VITE_API_BASE_URL=""
+          cache-from: type=gha
+          cache-to: type=gha,mode=min
+
+      # --- Validate compose files ---
+      - name: Validate docker-compose.yml
+        run: docker compose -f docker-compose.yml config --quiet
+
+      - name: Validate docker-compose.prod.yml
+        run: docker compose -f docker-compose.yml -f docker-compose.prod.yml config --quiet
+
+  # ------------------------------------------
+  # Docker Smoke Test — Full stack startup
+  # ------------------------------------------
+  docker-smoke-test:
+    name: Docker Smoke Test
+    runs-on: ubuntu-latest
+    needs: [docker]
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Create JWT keys for smoke test
+        run: |
+          mkdir -p keys
+          openssl genpkey -algorithm RSA -out keys/jwt-private.pem -pkeyopt rsa_keygen_bits:2048 2>/dev/null
+          openssl rsa -pubout -in keys/jwt-private.pem -out keys/jwt-public.pem 2>/dev/null
+
+      - name: Create smoke test env file
+        run: |
+          cat > .env << 'EOF'
+          POSTGRES_USER=postgres
+          POSTGRES_PASSWORD=smoke_test_password
+          MAIL_USERNAME=
+          MAIL_PASSWORD=
+          FRONTEND_PORT=3000
+          EOF
+
+      - name: Build and start all services
+        run: docker compose --env-file .env up -d --build --remove-orphans
+
+      - name: Wait for infrastructure health
+        run: |
+          echo "Waiting for PostgreSQL..."
+          for i in $(seq 1 30); do
+            docker compose exec -T postgres pg_isready -U postgres >/dev/null 2>&1 && break
+            sleep 2
+          done
+          echo "Waiting for Redis..."
+          for i in $(seq 1 20); do
+            docker compose exec -T redis redis-cli ping >/dev/null 2>&1 && break
+            sleep 2
+          done
+          echo "Waiting for Kafka..."
+          for i in $(seq 1 40); do
+            docker compose exec -T kafka kafka-topics.sh --bootstrap-server localhost:9093 --list >/dev/null 2>&1 && break
+            sleep 3
+          done
+          echo "Infrastructure ready."
+
+      - name: Wait for backend services
+        run: |
+          echo "Waiting for user-service..."
+          for i in $(seq 1 30); do
+            docker compose exec -T user-service wget -q -O /dev/null http://localhost:8006/api/users/register 2>/dev/null && break
+            sleep 3
+          done
+          echo "Waiting for product-service..."
+          for i in $(seq 1 30); do
+            docker compose exec -T product-service wget -q -O /dev/null http://localhost:8081/api/products 2>/dev/null && break
+            sleep 3
+          done
+          echo "Waiting for order-service..."
+          for i in $(seq 1 30); do
+            docker compose exec -T order-service wget -q -O /dev/null http://localhost:8082/api/v1/orders 2>/dev/null && break
+            sleep 3
+          done
+          echo "Backend services ready."
+
+      - name: Verify frontend responds
+        run: |
+          for i in $(seq 1 10); do
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:3000/ 2>/dev/null || true)
+            if [ "$STATUS" = "200" ]; then
+              echo "Frontend HTTP 200 OK"
+              break
+            fi
+            sleep 2
+          done
+          if [ "$STATUS" != "200" ]; then
+            echo "Frontend health check failed (got $STATUS)"
+            exit 1
+          fi
+
+      - name: Verify API proxy through Nginx
+        run: |
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:3000/api/products 2>/dev/null || true)
+          echo "GET /api/products -> HTTP $STATUS"
+          if [ "$STATUS" != "200" ] && [ "$STATUS" != "401" ]; then
+            echo "API proxy check failed"
+            exit 1
+          fi
+
+      - name: Collect Docker logs on failure
+        if: failure()
+        run: |
+          echo "=== Container Status ==="
+          docker compose ps
+          echo ""
+          echo "=== User Service Logs ==="
+          docker compose logs --tail=50 user-service 2>/dev/null || true
+          echo ""
+          echo "=== Product Service Logs ==="
+          docker compose logs --tail=50 product-service 2>/dev/null || true
+          echo ""
+          echo "=== Order Service Logs ==="
+          docker compose logs --tail=50 order-service 2>/dev/null || true
+          echo ""
+          echo "=== Frontend Logs ==="
+          docker compose logs --tail=50 frontend 2>/dev/null || true
+
+      - name: Tear down
+        if: always()
+        run: docker compose down -v --remove-orphans

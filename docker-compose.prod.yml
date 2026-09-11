@@ -1,0 +1,263 @@
+# ============================================
+# Production Docker Compose
+# ============================================
+# Usage: docker compose -f docker-compose.yml -f docker-compose.prod.yml --env-file .env up -d
+#
+# Key differences from the base docker-compose.yml:
+# - Only frontend (port 3000) is exposed to the host
+# - Backend and infrastructure services communicate internally only
+# - Secrets are injected via the --env-file flag, never hardcoded
+# - Infrastructure ports (PostgreSQL, Redis, Kafka) are NOT host-exposed
+# - Frontend build uses VITE_API_BASE_URL="" for same-origin proxy mode
+#
+# Required environment variables (set in .env or export before running):
+#   POSTGRES_PASSWORD    — PostgreSQL superuser password
+#   MAIL_USERNAME        — SMTP username for notification-service (optional)
+#   MAIL_PASSWORD        — SMTP password for notification-service (optional)
+#   FRONTEND_PORT        — Host port for frontend (default: 3000)
+
+services:
+  # ============================================
+  # Infrastructure Services (internal only)
+  # ============================================
+
+  postgres:
+    image: postgres:15-alpine
+    container_name: ecommerce-postgres
+    # No host port exposure in production — only reachable via Docker network
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./backend/docker/postgres-init/init-databases.sql:/docker-entrypoint-initdb.d/init-databases.sql
+    networks:
+      - ecommerce-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  zookeeper:
+    image: wurstmeister/zookeeper
+    container_name: ecommerce-zookeeper
+    networks:
+      - ecommerce-network
+    healthcheck:
+      test: ["CMD-SHELL", "echo ruok | nc localhost 2181 | grep imok"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  kafka:
+    image: wurstmeister/kafka
+    container_name: ecommerce-kafka
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_LISTENERS: INTERNAL://0.0.0.0:9093
+      KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka:9093
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: INTERNAL:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+    volumes:
+      - kafka-data:/var/lib/kafka/data
+    depends_on:
+      zookeeper:
+        condition: service_healthy
+    networks:
+      - ecommerce-network
+    healthcheck:
+      test: ["CMD-SHELL", "kafka-topics.sh --bootstrap-server localhost:9093 --list || exit 1"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: ecommerce-redis
+    # No host port exposure in production
+    volumes:
+      - redis-data:/data
+    networks:
+      - ecommerce-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # ============================================
+  # Microservices (internal only)
+  # ============================================
+
+  user-service:
+    build:
+      context: ./backend/user-service
+      dockerfile: Dockerfile
+    container_name: ecommerce-user-service
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/user_service_db
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-postgres}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      JWT_PRIVATE_KEY_PATH: /app/keys/jwt-private.pem
+    volumes:
+      - ./keys/jwt-private.pem:/app/keys/jwt-private.pem:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - ecommerce-network
+    restart: unless-stopped
+
+  product-service:
+    build:
+      context: ./backend/product-service
+      dockerfile: Dockerfile
+    container_name: ecommerce-product-service
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/product_service_db
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-postgres}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PORT: 6379
+      JWT_PUBLIC_KEY_PATH: /app/keys/jwt-public.pem
+      JWT_ISSUER: user-service
+    volumes:
+      - ./keys/jwt-public.pem:/app/keys/jwt-public.pem:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - ecommerce-network
+    restart: unless-stopped
+
+  order-service:
+    build:
+      context: ./backend/order-service
+      dockerfile: Dockerfile
+    container_name: ecommerce-order-service
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/order_service_db
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-postgres}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9093
+      JWT_PUBLIC_KEY_PATH: /app/keys/jwt-public.pem
+      JWT_ISSUER: user-service
+      PRODUCT_SERVICE_URL: http://product-service:8081
+    volumes:
+      - ./keys/jwt-public.pem:/app/keys/jwt-public.pem:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    networks:
+      - ecommerce-network
+    restart: unless-stopped
+
+  inventory-service:
+    build:
+      context: ./backend/inventory-service
+      dockerfile: Dockerfile
+    container_name: ecommerce-inventory-service
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/inventory_db
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-postgres}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9093
+      JWT_PUBLIC_KEY_PATH: /app/keys/jwt-public.pem
+      JWT_ISSUER: user-service
+    volumes:
+      - ./keys/jwt-public.pem:/app/keys/jwt-public.pem:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    networks:
+      - ecommerce-network
+    restart: unless-stopped
+
+  payment-service:
+    build:
+      context: ./backend/payment-service
+      dockerfile: Dockerfile
+    container_name: ecommerce-payment-service
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/payment_db
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-postgres}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9093
+      JWT_PUBLIC_KEY_PATH: /app/keys/jwt-public.pem
+      JWT_ISSUER: user-service
+    volumes:
+      - ./keys/jwt-public.pem:/app/keys/jwt-public.pem:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    networks:
+      - ecommerce-network
+    restart: unless-stopped
+
+  notification-service:
+    build:
+      context: ./backend/notification-service
+      dockerfile: Dockerfile
+    container_name: ecommerce-notification-service
+    environment:
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9093
+      MAIL_USERNAME: ${MAIL_USERNAME:-}
+      MAIL_PASSWORD: ${MAIL_PASSWORD:-}
+    depends_on:
+      kafka:
+        condition: service_healthy
+    networks:
+      - ecommerce-network
+    restart: unless-stopped
+
+  # ============================================
+  # Frontend — the only host-exposed service
+  # ============================================
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        # Empty string -> browser uses relative URLs -> Nginx reverse proxy
+        VITE_API_BASE_URL: ""
+    container_name: ecommerce-frontend
+    ports:
+      - "${FRONTEND_PORT:-3000}:80"
+    depends_on:
+      - user-service
+      - product-service
+      - order-service
+    networks:
+      - ecommerce-network
+    restart: unless-stopped
+
+# ============================================
+# Networks
+# ============================================
+networks:
+  ecommerce-network:
+    driver: bridge
+
+# ============================================
+# Volumes
+# ============================================
+volumes:
+  postgres-data:
+  kafka-data:
+  redis-data:

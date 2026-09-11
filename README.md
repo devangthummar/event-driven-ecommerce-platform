@@ -38,6 +38,7 @@ Notification Service (8086) ← Kafka: order-events (independent consumer)
 | inventory-service | 8084 | inventory_db | Stock reservation, compensation, FOR UPDATE locking |
 | payment-service | 8085 | payment_db | Wallet debit, payment idempotency, REQUIRES_NEW tx |
 | notification-service | 8086 | (none) | Order confirmation emails via Kafka events |
+| frontend | 3000 (80) | (none) | React/Vite SPA served by Nginx with API reverse proxy |
 
 ## Technology Stack
 
@@ -158,30 +159,30 @@ Topics:
 
 ## Docker Setup
 
-```bash
-# Start all services
-docker compose up -d
+### Native Development vs Docker Deployment
 
-# Start infrastructure only
-docker compose up -d postgres kafka zookeeper redis
+- **Native Development**:
+  - Run frontend dev server: `cd frontend && npm run dev` (accessible at `http://localhost:5173`)
+  - Run microservices: `$env:JAVA_HOME="C:\Program Files\Java\jdk-25"; cd backend\user-service && .\mvnw.cmd spring-boot:run`
+- **Docker Compose (Full Platform)**:
+  - Start full stack: `docker compose up -d` (accessible at `http://localhost:3000`)
+  - Start infrastructure only: `docker compose up -d postgres kafka zookeeper redis`
+  - Rebuild images: `docker compose build`
+  - View service logs: `docker compose logs -f order-service`
 
-# Build all services
-docker compose build
+### Docker Compose Infrastructure & Services
 
-# View logs
-docker compose logs -f order-service
-```
+- **postgres:15-alpine** — PostgreSQL 15 hosting per-service databases (init script `init-databases.sql`)
+- **zookeeper** + **kafka** (wurstmeister) — Kafka event broker on internal port 9093 & external port 9092
+- **redis:7-alpine** — Product Service cache
+- **user-service**, **product-service**, **order-service**, **inventory-service**, **payment-service**, **notification-service** — Spring Boot microservices
+- **frontend** — Multi-stage React/Vite production build served via Nginx with SPA routing fallback (`try_files $uri /index.html`) and API proxying (`/api/users`, `/api/products`, `/api/v1/orders`)
 
-### Docker Compose Services
-- **postgres:15-alpine** — all databases (init script creates them)
-- **zookeeper** + **kafka** (wurstmeister) — message broker
-- **redis:7-alpine** — product cache
-- All 6 application services with health checks and proper dependencies
+### Security & Key Mounting
 
-### Security: Key Mounting
-- User Service receives `jwt-private.pem` (signing only)
-- All other services receive `jwt-public.pem` (validation only)
-- Private key never reaches downstream containers
+- **User Service** receives `keys/jwt-private.pem` (signing only) mounted read-only (`:ro`)
+- **Downstream Services** receive `keys/jwt-public.pem` (validation only) mounted read-only (`:ro`)
+- RSA private key is never baked into images or exposed to downstream services or frontend JavaScript
 
 ## Environment Variables
 
