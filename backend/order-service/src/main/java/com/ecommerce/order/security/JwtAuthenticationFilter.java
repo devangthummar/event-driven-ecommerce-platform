@@ -106,6 +106,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
             String username = claims.getSubject();
             String role = claims.get("role", String.class);
+            Long userId = claims.get("userId", Long.class);
 
             List<SimpleGrantedAuthority> authorities = List.of();
             if (role != null && !role.isBlank()) {
@@ -116,8 +117,11 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                     new UsernamePasswordAuthenticationToken(
                             username, null, authorities);
 
-            authToken.setDetails(
-                    new WebAuthenticationDetailsSource().buildDetails(request));
+            // Store userId in details for ownership checks in controllers.
+            java.util.Map<String, Object> details = new java.util.HashMap<>();
+            details.put("userId", userId);
+            details.put("role", role);
+            authToken.setDetails(details);
 
             SecurityContextHolder.getContext().setAuthentication(authToken);
 

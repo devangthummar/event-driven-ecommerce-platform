@@ -49,6 +49,7 @@ public class JwtService {
                 .issuedAt(now)
                 .expiration(expiryDate)
                 .claim("role", userDetails.getAuthorities().iterator().next().getAuthority())
+                .claim("userId", userDetails.getUser().getId())
                 .signWith(privateKey)
                 .compact();
     }

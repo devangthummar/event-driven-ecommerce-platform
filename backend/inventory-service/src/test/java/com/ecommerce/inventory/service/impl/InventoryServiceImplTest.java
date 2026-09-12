@@ -1,11 +1,13 @@
 package com.ecommerce.inventory.service.impl;
 
 import com.ecommerce.inventory.dto.request.ReserveStockRequest;
+import com.ecommerce.inventory.dto.request.StockRequest;
 import com.ecommerce.inventory.dto.response.InventoryResponse;
 import com.ecommerce.inventory.entity.Inventory;
 import com.ecommerce.inventory.entity.Reservation;
 import com.ecommerce.inventory.entity.enums.ReservationStatus;
 import com.ecommerce.inventory.exception.InsufficientStockException;
+import com.ecommerce.inventory.exception.InventoryAlreadyExistsException;
 import com.ecommerce.inventory.exception.InventoryNotFoundException;
 import com.ecommerce.inventory.mapper.InventoryMapper;
 import com.ecommerce.inventory.repository.InventoryRepository;
@@ -230,5 +232,201 @@ class InventoryServiceImplTest {
         assertEquals(ReservationStatus.CONFIRMED, confirmed.getStatus());
         verify(inventoryRepository, never()).save(any(Inventory.class));
         verify(reservationRepository, never()).save(any(Reservation.class));
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // addStock — must use pessimistic lock (findByProductIdForUpdate)
+    // ═══════════════════════════════════════════════════════════════════════
+
+    @Test
+    void addStock_withPessimisticLock_incrementsQuantities() {
+        StockRequest request = new StockRequest();
+        request.setProductId(PRODUCT_ID);
+        request.setQuantity(5);
+
+        when(inventoryRepository.findByProductIdForUpdate(PRODUCT_ID))
+                .thenReturn(Optional.of(inventory));
+        when(inventoryRepository.save(any(Inventory.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+        when(inventoryMapper.toInventoryResponse(any(Inventory.class)))
+                .thenReturn(inventoryResponse);
+
+        inventoryService.addStock(request);
+
+        assertEquals(15, inventory.getAvailableQuantity());
+        assertEquals(15, inventory.getTotalQuantity());
+        // Must lock the row, not use an unlocked lookup
+        verify(inventoryRepository).findByProductIdForUpdate(PRODUCT_ID);
+        verify(inventoryRepository, never()).findByProductId(PRODUCT_ID);
+    }
+
+    @Test
+    void addStock_inventoryNotFound_throwsInventoryNotFoundException() {
+        StockRequest request = new StockRequest();
+        request.setProductId(PRODUCT_ID);
+        request.setQuantity(5);
+
+        when(inventoryRepository.findByProductIdForUpdate(PRODUCT_ID))
+                .thenReturn(Optional.empty());
+
+        assertThrows(InventoryNotFoundException.class,
+                () -> inventoryService.addStock(request));
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // releaseReservedStock — must use pessimistic lock (findByProductIdForUpdate)
+    // ═══════════════════════════════════════════════════════════════════════
+
+    @Test
+    void releaseReservedStock_withPessimisticLock_restoresQuantities() {
+        inventory.setAvailableQuantity(5);
+        inventory.setReservedQuantity(5);
+
+        ReserveStockRequest request = ReserveStockRequest.builder()
+                .orderId(ORDER_ID)
+                .productId(PRODUCT_ID)
+                .quantity(3)
+                .build();
+
+        InventoryResponse response = InventoryResponse.builder()
+                .productId(PRODUCT_ID)
+                .availableQuantity(8)
+                .reservedQuantity(2)
+                .build();
+
+        when(inventoryRepository.findByProductIdForUpdate(PRODUCT_ID))
+                .thenReturn(Optional.of(inventory));
+        when(inventoryRepository.save(any(Inventory.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+        when(inventoryMapper.toInventoryResponse(any(Inventory.class)))
+                .thenReturn(response);
+
+        InventoryResponse result = inventoryService.releaseReservedStock(request);
+
+        assertEquals(8, inventory.getAvailableQuantity());
+        assertEquals(2, inventory.getReservedQuantity());
+        // Must lock the row, not use an unlocked lookup
+        verify(inventoryRepository).findByProductIdForUpdate(PRODUCT_ID);
+        verify(inventoryRepository, never()).findByProductId(PRODUCT_ID);
+    }
+
+    @Test
+    void releaseReservedStock_insufficientReservedQuantity_throwsIllegalArgument() {
+        inventory.setReservedQuantity(1);
+
+        ReserveStockRequest request = ReserveStockRequest.builder()
+                .orderId(ORDER_ID)
+                .productId(PRODUCT_ID)
+                .quantity(5)
+                .build();
+
+        when(inventoryRepository.findByProductIdForUpdate(PRODUCT_ID))
+                .thenReturn(Optional.of(inventory));
+
+        assertThrows(IllegalArgumentException.class,
+                () -> inventoryService.releaseReservedStock(request));
+    }
+
+    @Test
+    void releaseReservedStock_inventoryNotFound_throwsInventoryNotFoundException() {
+        ReserveStockRequest request = ReserveStockRequest.builder()
+                .orderId(ORDER_ID)
+                .productId(PRODUCT_ID)
+                .quantity(3)
+                .build();
+
+        when(inventoryRepository.findByProductIdForUpdate(PRODUCT_ID))
+                .thenReturn(Optional.empty());
+
+        assertThrows(InventoryNotFoundException.class,
+                () -> inventoryService.releaseReservedStock(request));
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // confirmReservedStock — must use pessimistic lock (findByProductIdForUpdate)
+    // ═══════════════════════════════════════════════════════════════════════
+
+    @Test
+    void confirmReservedStock_withPessimisticLock_convertsReservedToTotal() {
+        inventory.setAvailableQuantity(5);
+        inventory.setReservedQuantity(5);
+        inventory.setTotalQuantity(10);
+
+        ReserveStockRequest request = ReserveStockRequest.builder()
+                .orderId(ORDER_ID)
+                .productId(PRODUCT_ID)
+                .quantity(3)
+                .build();
+
+        InventoryResponse response = InventoryResponse.builder()
+                .productId(PRODUCT_ID)
+                .availableQuantity(5)
+                .reservedQuantity(2)
+                .build();
+
+        when(inventoryRepository.findByProductIdForUpdate(PRODUCT_ID))
+                .thenReturn(Optional.of(inventory));
+        when(inventoryRepository.save(any(Inventory.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+        when(inventoryMapper.toInventoryResponse(any(Inventory.class)))
+                .thenReturn(response);
+
+        inventoryService.confirmReservedStock(request);
+
+        assertEquals(2, inventory.getReservedQuantity());
+        assertEquals(7, inventory.getTotalQuantity());
+        // Must lock the row, not use an unlocked lookup
+        verify(inventoryRepository).findByProductIdForUpdate(PRODUCT_ID);
+        verify(inventoryRepository, never()).findByProductId(PRODUCT_ID);
+    }
+
+    @Test
+    void confirmReservedStock_insufficientReservedQuantity_throwsInsufficientStock() {
+        inventory.setReservedQuantity(1);
+
+        ReserveStockRequest request = ReserveStockRequest.builder()
+                .orderId(ORDER_ID)
+                .productId(PRODUCT_ID)
+                .quantity(5)
+                .build();
+
+        when(inventoryRepository.findByProductIdForUpdate(PRODUCT_ID))
+                .thenReturn(Optional.of(inventory));
+
+        assertThrows(InsufficientStockException.class,
+                () -> inventoryService.confirmReservedStock(request));
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // createInventory — must be transactional
+    // ═══════════════════════════════════════════════════════════════════════
+
+    @Test
+    void createInventory_newProduct_createsInventory() {
+        StockRequest request = new StockRequest();
+        request.setProductId(PRODUCT_ID);
+        request.setQuantity(10);
+
+        when(inventoryRepository.existsByProductId(PRODUCT_ID)).thenReturn(false);
+        when(inventoryRepository.save(any(Inventory.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+        when(inventoryMapper.toInventoryResponse(any(Inventory.class)))
+                .thenReturn(inventoryResponse);
+
+        inventoryService.createInventory(request);
+
+        verify(inventoryRepository).save(any(Inventory.class));
+    }
+
+    @Test
+    void createInventory_duplicateProduct_throwsInventoryAlreadyExists() {
+        StockRequest request = new StockRequest();
+        request.setProductId(PRODUCT_ID);
+        request.setQuantity(10);
+
+        when(inventoryRepository.existsByProductId(PRODUCT_ID)).thenReturn(true);
+
+        assertThrows(InventoryAlreadyExistsException.class,
+                () -> inventoryService.createInventory(request));
     }
 }

@@ -32,6 +32,7 @@ public class InventoryServiceImpl implements InventoryService {
     private final InventoryMapper inventoryMapper;
 
     @Override
+    @Transactional
     public InventoryResponse createInventory(StockRequest request) {
 
         if (inventoryRepository.existsByProductId(request.getProductId())) {
@@ -70,15 +71,17 @@ public class InventoryServiceImpl implements InventoryService {
     }
 
     /**
-     * Adds stock to an existing inventory. The read of the current quantity and the
-     * subsequent update are wrapped in a single transaction so the operation is atomic.
+     * Adds stock to an existing inventory. The inventory row is read with a
+     * pessimistic (FOR UPDATE) lock so concurrent stock additions for the same product
+     * are serialized by the database — preventing lost updates where two additions read
+     * the same quantity, both add their amount, and one overwrites the other.
      */
     @Override
     @Transactional
     public InventoryResponse addStock(StockRequest request) {
 
         Inventory inventory = inventoryRepository
-                .findByProductId(request.getProductId())
+                .findByProductIdForUpdate(request.getProductId())
                 .orElseThrow(() ->
                         new InventoryNotFoundException(
                                 "Inventory not found."
@@ -171,16 +174,18 @@ public class InventoryServiceImpl implements InventoryService {
     }
 
     /**
-     * Releases previously reserved stock back to available. The read-check-update cycle
-     * runs in a single transaction so the reservation cannot be released twice
-     * concurrently via a stale read.
+     * Releases previously reserved stock back to available. The inventory row is read
+     * with a pessimistic (FOR UPDATE) lock so concurrent releases for the same product
+     * are serialized by the database — the second concurrent caller blocks on the lock,
+     * re-reads the fresh committed state, and either succeeds or fails on the updated
+     * reserved quantity.
      */
     @Override
     @Transactional
     public InventoryResponse releaseReservedStock(ReserveStockRequest request) {
 
         Inventory inventory = inventoryRepository
-                .findByProductId(request.getProductId())
+                .findByProductIdForUpdate(request.getProductId())
                 .orElseThrow(() ->
                         new InventoryNotFoundException(
                                 "Inventory not found."
@@ -210,14 +215,15 @@ public class InventoryServiceImpl implements InventoryService {
 
     }    /**
      * Confirms a reservation by converting reserved stock into total (sold) stock. The
-     * read-check-update cycle runs in a single transaction.
+     * inventory row is read with a pessimistic (FOR UPDATE) lock so concurrent
+     * confirmations for the same product are serialized by the database.
      */
     @Override
     @Transactional
     public InventoryResponse confirmReservedStock(ReserveStockRequest request) {
 
         Inventory inventory = inventoryRepository
-                .findByProductId(request.getProductId())
+                .findByProductIdForUpdate(request.getProductId())
                 .orElseThrow(() ->
                         new InventoryNotFoundException(
                                 "Inventory not found."
