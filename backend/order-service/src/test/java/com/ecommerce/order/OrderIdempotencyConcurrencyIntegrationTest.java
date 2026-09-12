@@ -48,7 +48,9 @@ import static org.mockito.Mockito.when;
         "spring.datasource.username=postgres",
         "spring.datasource.password=password",
         "spring.jpa.hibernate.ddl-auto=create-drop",
-        "spring.kafka.listener.auto-startup=false"
+        "spring.jpa.properties.hibernate.dialect=org.hibernate.dialect.PostgreSQLDialect",
+        "spring.kafka.listener.auto-startup=false",
+        "outbox.scheduler.enabled=false"
 })
 class OrderIdempotencyConcurrencyIntegrationTest {
 

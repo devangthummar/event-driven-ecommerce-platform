@@ -207,11 +207,12 @@ def docker_exec(container, cmd):
         return f"EXEC_ERROR: {e}"
 
 
-def docker_compose_logs(service, tail=100):
-    """Get docker-compose logs for a service."""
-    cmd = f"docker compose logs --tail={tail} {service} 2>&1"
+def docker_compose_logs(service, tail=5000):
+    """Get docker logs for a service container."""
+    container = service if service.startswith("ecommerce-") else f"ecommerce-{service}"
+    cmd = f"docker logs --tail={tail} {container} 2>&1"
     try:
-        r = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=30, cwd=DOCKER_COMPOSE_DIR)
+        r = subprocess.run(cmd, shell=True, capture_output=True, text=True, errors="replace", timeout=30)
         return r.stdout + r.stderr
     except subprocess.TimeoutExpired:
         return "TIMEOUT"
@@ -724,41 +725,42 @@ def section_5():
     log("Waiting 15 seconds for async Kafka processing...")
     time.sleep(15)
 
-    # 5.2a: Order Service logs
-    order_logs = docker_compose_logs("order-service", 150)
-    has_order_created = "OrderCreatedEvent" in order_logs or "publishOrderCreatedEvent" in order_logs
-    has_stock_reserved = "StockReservedEvent" in order_logs
-    log_check_a = f"OrderCreated:{has_order_created} StockReserved:{has_stock_reserved}"
-    record("5.2a", "Order Service Kafka logs",
-           "PASS" if has_order_created else "FAIL",
+    # 5.2a: Order Service logs — verify outbox persistence + consumption
+    order_logs = docker_compose_logs("order-service", 5000)
+    has_order_outbox = "Persisting OrderCreatedEvent to Outbox" in order_logs
+    has_stock_reserved = "Received StockReservedEvent" in order_logs
+    has_payment_req_outbox = "Persisting PaymentRequestEvent to Outbox" in order_logs
+    log_check_a = f"OutboxPersist:{has_order_outbox} StockReserved:{has_stock_reserved} PaymentRequested:{has_payment_req_outbox}"
+    record("5.2a", "Order Service outbox + Kafka logs",
+           "PASS" if has_order_outbox else "FAIL",
            log_result=log_check_a,
            extra=order_logs[-600:] if len(order_logs) > 600 else order_logs)
 
-    # 5.2b: Inventory Service logs
-    inv_logs = docker_compose_logs("inventory-service", 150)
-    has_inv_order_event = "OrderCreatedEvent" in inv_logs
-    has_reserve = "reserveStock" in inv_logs or "Reserving stock" in inv_logs or "reserve" in inv_logs.lower()
-    has_stock_reserved_pub = "StockReservedEvent" in inv_logs or "publishStockReservedEvent" in inv_logs
-    log_check_b = f"OrderEvent:{has_inv_order_event} Reserve:{has_reserve} StockReservedPub:{has_stock_reserved_pub}"
-    record("5.2b", "Inventory Service Kafka logs",
+    # 5.2b: Inventory Service logs — verify outbox persistence + reservation
+    inv_logs = docker_compose_logs("inventory-service", 5000)
+    has_inv_order_event = "Received OrderCreatedEvent" in inv_logs
+    has_reserve = "Reserving stock" in inv_logs or "reserve" in inv_logs.lower()
+    has_stock_reserved_outbox = "Persisting StockReservedEvent to Outbox" in inv_logs
+    log_check_b = f"OrderEvent:{has_inv_order_event} Reserve:{has_reserve} OutboxPub:{has_stock_reserved_outbox}"
+    record("5.2b", "Inventory Service outbox + Kafka logs",
            "PASS" if (has_inv_order_event and has_reserve) else "FAIL",
            log_result=log_check_b,
            extra=inv_logs[-600:] if len(inv_logs) > 600 else inv_logs)
 
-    # 5.2c: Payment Service logs
-    pay_logs = docker_compose_logs("payment-service", 150)
-    has_payment_cmd = "PaymentRequestEvent" in pay_logs
-    has_process = "processPayment" in pay_logs or "Payment processing" in pay_logs or "Idempotent" in pay_logs
-    has_success = "PaymentSuccessEvent" in pay_logs or "SUCCESS" in pay_logs
-    log_check_c = f"PaymentReq:{has_payment_cmd} Process:{has_process} Success:{has_success}"
-    record("5.2c", "Payment Service Kafka logs",
-           "PASS" if (has_payment_cmd or has_process) else "FAIL",
+    # 5.2c: Payment Service logs — verify outbox persistence + processing
+    pay_logs = docker_compose_logs("payment-service", 5000)
+    has_payment_received = "Received PaymentRequestEvent" in pay_logs
+    has_process = "Payment processing" in pay_logs or "Idempotent" in pay_logs
+    has_success_outbox = "Persisting PaymentSuccessEvent to Outbox" in pay_logs or "PaymentSuccessEvent" in pay_logs
+    log_check_c = f"Received:{has_payment_received} Process:{has_process} SuccessOutbox:{has_success_outbox}"
+    record("5.2c", "Payment Service outbox + Kafka logs",
+           "PASS" if (has_payment_received or has_process) else "FAIL",
            log_result=log_check_c,
            extra=pay_logs[-600:] if len(pay_logs) > 600 else pay_logs)
 
-    # 5.2d: Notification Service logs
-    notif_logs = docker_compose_logs("notification-service", 150)
-    has_notif_order = "OrderCreatedEvent" in notif_logs
+    # 5.2d: Notification Service logs — verify event consumption from Kafka
+    notif_logs = docker_compose_logs("notification-service", 5000)
+    has_notif_order = "Received OrderCreatedEvent" in notif_logs
     has_email = "email" in notif_logs.lower() or "Email" in notif_logs
     log_check_d = f"OrderEvent:{has_notif_order} Email:{has_email}"
     record("5.2d", "Notification Service Kafka logs",
@@ -825,6 +827,50 @@ def section_5():
         record("5.6", "Verify WALLET balance decreased", "FAIL",
                db_result=db_result.strip()[:200],
                error="Could not parse DB output")
+
+    # --- Test 5.7: Verify Outbox messages were used (Outbox architecture) ---
+    order_outbox = docker_exec("ecommerce-postgres",
+        'psql -U postgres -d order_service_db -t -A -c "SELECT COUNT(*) FROM outbox_messages WHERE aggregate_type = \'ORDER\' AND event_type = \'OrderCreatedEvent\';"')
+    inv_outbox = docker_exec("ecommerce-postgres",
+        'psql -U postgres -d inventory_db -t -A -c "SELECT COUNT(*) FROM outbox_messages WHERE event_type = \'StockReservedEvent\';"')
+    pay_outbox = docker_exec("ecommerce-postgres",
+        'psql -U postgres -d payment_db -t -A -c "SELECT COUNT(*) FROM outbox_messages WHERE event_type = \'PaymentSuccessEvent\';"')
+    log(f"  Outbox order_service_db OrderCreatedEvent count: {order_outbox.strip()}")
+    log(f"  Outbox inventory_db StockReservedEvent count: {inv_outbox.strip()}")
+    log(f"  Outbox payment_db PaymentSuccessEvent count: {pay_outbox.strip()}")
+    try:
+        order_outbox_count = int(order_outbox.strip()) if order_outbox.strip().isdigit() else 0
+        inv_outbox_count = int(inv_outbox.strip()) if inv_outbox.strip().isdigit() else 0
+        pay_outbox_count = int(pay_outbox.strip()) if pay_outbox.strip().isdigit() else 0
+        outbox_ok = order_outbox_count >= 1 and inv_outbox_count >= 1 and pay_outbox_count >= 1
+        record("5.7", "Verify events persisted to Outbox (outbox architecture)",
+               "PASS" if outbox_ok else "FAIL",
+               log_result=f"Order:{order_outbox_count} Inv:{inv_outbox_count} Pay:{pay_outbox_count}",
+               error=None if outbox_ok else "Expected all services to have outbox messages")
+    except Exception as e:
+        record("5.7", "Verify events persisted to Outbox (outbox architecture)", "FAIL",
+               error=f"Could not parse outbox counts: {e}")
+
+    # Verify outbox messages are in PUBLISHED state (scheduler processed them)
+    order_published = docker_exec("ecommerce-postgres",
+        'psql -U postgres -d order_service_db -t -A -c "SELECT COUNT(*) FROM outbox_messages WHERE status = \'PUBLISHED\';"')
+    inv_published = docker_exec("ecommerce-postgres",
+        'psql -U postgres -d inventory_db -t -A -c "SELECT COUNT(*) FROM outbox_messages WHERE status = \'PUBLISHED\';"')
+    pay_published = docker_exec("ecommerce-postgres",
+        'psql -U postgres -d payment_db -t -A -c "SELECT COUNT(*) FROM outbox_messages WHERE status = \'PUBLISHED\';"')
+    log(f"  Outbox PUBLISHED - Order:{order_published.strip()} Inv:{inv_published.strip()} Pay:{pay_published.strip()}")
+    try:
+        op = int(order_published.strip()) if order_published.strip().isdigit() else 0
+        ip = int(inv_published.strip()) if inv_published.strip().isdigit() else 0
+        pp = int(pay_published.strip()) if pay_published.strip().isdigit() else 0
+        all_published = op >= 1 and ip >= 1 and pp >= 1
+        record("5.8", "Verify Outbox scheduler published messages to Kafka",
+               "PASS" if all_published else "FAIL",
+               log_result=f"OrderPublished:{op} InvPublished:{ip} PayPublished:{pp}",
+               error=None if all_published else "Expected PUBLISHED outbox messages via scheduler")
+    except Exception as e:
+        record("5.8", "Verify Outbox scheduler published messages to Kafka", "FAIL",
+               error=f"Could not parse published counts: {e}")
 
 
 # ============================================================
@@ -923,9 +969,9 @@ def section_6():
     log("Waiting 15 seconds for async Kafka compensation flow...")
     time.sleep(15)
 
-    # 6.4a: Check Order Service logs
-    order_logs = docker_compose_logs("order-service", 200)
-    has_payment_failed = "PaymentFailedEvent" in order_logs
+    # 6.4a: Check Order Service logs — verify compensation via outbox
+    order_logs = docker_compose_logs("order-service", 5000)
+    has_payment_failed = "Received PaymentFailedEvent" in order_logs or "PaymentFailedEvent" in order_logs
     has_cancelled = "CANCELLED" in order_logs or "OrderCancelledEvent" in order_logs
     log_check_a = f"PaymentFailed:{has_payment_failed} Cancelled:{has_cancelled}"
     record("6.4a", "Order Service compensation logs",
@@ -933,10 +979,10 @@ def section_6():
            log_result=log_check_a,
            extra=order_logs[-600:] if len(order_logs) > 600 else order_logs)
 
-    # 6.4b: Check Inventory Service logs
-    inv_logs = docker_compose_logs("inventory-service", 200)
-    has_cancel_consumed = "OrderCancelledEvent" in inv_logs
-    has_release = "releaseStock" in inv_logs or "release" in inv_logs.lower()
+    # 6.4b: Check Inventory Service logs — verify stock release
+    inv_logs = docker_compose_logs("inventory-service", 5000)
+    has_cancel_consumed = "Received OrderCancelledEvent" in inv_logs or "OrderCancelledEvent" in inv_logs
+    has_release = "release" in inv_logs.lower() or "Released stock" in inv_logs or "Stock release" in inv_logs
     log_check_b = f"CancelEvent:{has_cancel_consumed} Release:{has_release}"
     record("6.4b", "Inventory Service compensation logs",
            "PASS" if (has_cancel_consumed or has_release) else "FAIL",
@@ -1502,9 +1548,9 @@ def generate_report():
         working = any(ind in all_logs for ind in indicators)
         return f"[{'WORKING' if working else 'BROKEN'}]"
 
-    log(f"  Order -> Inventory: {check_flow('Order->Inventory', ['OrderCreatedEvent'])}")
-    log(f"  Inventory -> Order (return): {check_flow('Inventory->Order', ['StockReservedEvent', 'publishStockReservedEvent'])}")
-    log(f"  Order -> Payment: {check_flow('Order->Payment', ['PaymentRequestEvent', 'publishPaymentRequestEvent'])}")
+    log(f"  Order -> Inventory: {check_flow('Order->Inventory', ['OrderCreatedEvent', 'Persisting OrderCreatedEvent to Outbox'])}")
+    log(f"  Inventory -> Order (return): {check_flow('Inventory->Order', ['StockReservedEvent', 'Persisting StockReservedEvent to Outbox'])}")
+    log(f"  Order -> Payment: {check_flow('Order->Payment', ['PaymentRequestEvent', 'Persisting PaymentRequestEvent to Outbox'])}")
     log(f"  Payment -> Order (return): {check_flow('Payment->Order', ['PaymentSuccessEvent', 'PaymentFailedEvent'])}")
     log(f"  Order -> Notification: {check_flow('Order->Notification', ['notification', 'OrderCreatedEvent'])}")
 
