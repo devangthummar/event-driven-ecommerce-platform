@@ -1,4 +1,4 @@
-# Event-Driven E-Commerce Platform
+# Distributed Order Orchestration & Transaction Platform
 
 A production-oriented full-stack e-commerce platform built with **Java, Spring Boot, Apache Kafka, PostgreSQL, Redis, React, Docker, and GitHub Actions**.
 
@@ -634,7 +634,7 @@ The backend pipeline uses a service matrix so each microservice can be independe
 # Project Structure
 
 ```text
-event-driven-ecommerce-platform/
+distributed-order-orchestration-transaction-platform/
 │
 ├── backend/
 │   ├── user-service/
@@ -737,9 +737,9 @@ These limitations are intentionally documented rather than presenting unverified
 ## Clone
 
 ```bash
-git clone https://github.com/devangthummar/event-driven-ecommerce-platform.git
+git clone https://github.com/devangthummar/distributed-order-orchestration-transaction-platform.git
 
-cd event-driven-ecommerce-platform
+cd distributed-order-orchestration-transaction-platform
 ```
 
 ## Start Infrastructure
@@ -862,7 +862,7 @@ Computer Engineering student focused on **Java backend engineering, Spring Boot,
 
 <p align="center">
 
-<strong>Event-Driven E-Commerce Platform</strong>
+<strong>Distributed Order Orchestration &amp; Transaction Platform</strong>
 
 <br>
 

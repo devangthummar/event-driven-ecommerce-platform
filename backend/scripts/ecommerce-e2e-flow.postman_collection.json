@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "E-Commerce E2E Kafka Flow",
-    "description": "End-to-end test collection for the Event-Driven E-Commerce Platform.\n\nSequence: Register User → Login → Create Wallet → Add Balance → Create Product → Add Inventory → Create Order\n\nThe Order creation triggers the Kafka event flow: Order → Inventory → Payment → Order.\n\nNOTE: This collection uses the ACTUAL endpoints from the codebase:\n- User Service: port 8006\n- Product Service: port 8081\n- Inventory Service: port 8083\n- Order Service: port 8082\n- Payment/Wallet Service: port 8085",
+    "description": "End-to-end test collection for the Distributed Order Orchestration & Transaction Platform.\n\nSequence: Register User → Login → Create Wallet → Add Balance → Create Product → Add Inventory → Create Order\n\nThe Order creation triggers the Kafka event flow: Order → Inventory → Payment → Order.\n\nNOTE: This collection uses the ACTUAL endpoints from the codebase:\n- User Service: port 8006\n- Product Service: port 8081\n- Inventory Service: port 8083\n- Order Service: port 8082\n- Payment/Wallet Service: port 8085",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [

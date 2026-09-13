@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Comprehensive End-to-End Test Suite for Event-Driven Microservices E-Commerce Platform
+Comprehensive End-to-End Test Suite for Distributed Order Orchestration & Transaction Platform
 ========================================================================================
 Tests all 12 sections covering User, Product, Payment, Inventory, Order services,
 Kafka event flow, Saga compensation, idempotency, security, error handling,

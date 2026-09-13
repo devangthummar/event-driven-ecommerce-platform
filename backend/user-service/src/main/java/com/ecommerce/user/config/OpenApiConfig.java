@@ -21,7 +21,7 @@ public class OpenApiConfig {
                         .title("User Service API")
 
                         .description(
-                                "Authentication and User Management APIs for the Event-Driven E-Commerce Platform.")
+                                "Authentication and User Management APIs for the Distributed Order Orchestration & Transaction Platform.")
 
                         .version("v1.0")
 

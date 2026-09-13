@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-E2E Saga Flow Test Script for Event-Driven E-Commerce Platform
+E2E Saga Flow Test Script for Distributed Order Orchestration & Transaction Platform
 Tests all 6 microservices in sequence, captures responses, and reports results.
 """
 
@@ -467,7 +467,7 @@ def check_databases():
 # ============================================
 def main():
     print("=" * 70)
-    print("E2E SAGA FLOW TEST - Event-Driven E-Commerce Platform")
+    print("E2E SAGA FLOW TEST - Distributed Order Orchestration & Transaction Platform")
     print(f"Started at: {datetime.now().isoformat()}")
     print(f"Test user: {TEST_USER['email']} | Phone: {TEST_USER['phoneNumber']}")
     print("=" * 70)

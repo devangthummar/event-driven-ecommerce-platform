@@ -6,11 +6,11 @@
     <modelVersion>4.0.0</modelVersion>
 
     <groupId>com.ecommerce</groupId>
-    <artifactId>event-driven-ecommerce-platform</artifactId>
+    <artifactId>distributed-order-orchestration-transaction-platform</artifactId>
     <version>1.0.0</version>
     <packaging>pom</packaging>
 
-    <name>Event-Driven E-Commerce Platform</name>
+    <name>Distributed Order Orchestration &amp; Transaction Platform</name>
     <description>Production-grade microservices e-commerce platform with Kafka, Saga, and real-time tracking</description>
 
     <properties>

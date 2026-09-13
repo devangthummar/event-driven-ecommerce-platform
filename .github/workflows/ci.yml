@@ -1,5 +1,5 @@
 # ============================================
-# CI Pipeline — Event-Driven E-Commerce Platform
+# CI Pipeline — Distributed Order Orchestration & Transaction Platform
 # ============================================
 # Triggers on pushes to main and all pull requests.
 # Validates: backend tests, frontend lint+build, Docker images, compose config.

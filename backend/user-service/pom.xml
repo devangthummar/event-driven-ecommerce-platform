@@ -19,7 +19,7 @@
     <version>0.0.1-SNAPSHOT</version>
 
     <name>user-service</name>
-    <description>User Service for Event Driven E-Commerce Platform</description>
+    <description>User Service for Distributed Order Orchestration &amp; Transaction Platform</description>
 
     <properties>
         <java.version>17</java.version>

@@ -19,7 +19,7 @@
     <artifactId>product-service</artifactId>
     <version>0.0.1-SNAPSHOT</version>
     <name>product-service</name>
-    <description>Product Service for Event Driven E-Commerce Platform</description>
+    <description>Product Service for Distributed Order Orchestration &amp; Transaction Platform</description>
 
     <!-- Project Properties -->
     <properties>
