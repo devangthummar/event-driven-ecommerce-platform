@@ -10,6 +10,7 @@ import com.ecommerce.user.entity.Role;
 import com.ecommerce.user.entity.User;
 import com.ecommerce.user.exception.EmailAlreadyExistsException;
 import com.ecommerce.user.exception.InvalidPasswordException;
+import com.ecommerce.user.exception.PhoneAlreadyExistsException;
 import com.ecommerce.user.exception.UserNotFoundException;
 import com.ecommerce.user.mapper.UserMapper;
 import com.ecommerce.user.repository.UserRepository;
@@ -40,6 +41,10 @@ public class UserServiceImpl implements UserService {
      * registrations. The {@code existsByEmail} pre-check only avoids paying the cost of a
      * doomed insert; if two concurrent requests race past it, the loser's insert fails
      * the constraint and is translated into the same domain exception as the pre-check.
+     *
+     * <p>{@code users.phone_number} carries the same UNIQUE guarantee, so it is
+     * pre-checked identically: without that, a duplicate phone number reaches the
+     * database and surfaces to the client as an opaque 500 instead of a 409.</p>
      */
     @Override
     @Transactional
@@ -47,6 +52,10 @@ public class UserServiceImpl implements UserService {
 
         if (userRepository.existsByEmail(request.getEmail())) {
             throw new EmailAlreadyExistsException("Email already exists");
+        }
+
+        if (userRepository.existsByPhoneNumber(request.getPhoneNumber())) {
+            throw new PhoneAlreadyExistsException("Phone number already exists");
         }
 
         User user = userMapper.toEntity(request, passwordEncoder);

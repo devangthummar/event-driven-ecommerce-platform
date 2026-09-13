@@ -6,6 +6,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
 import java.time.LocalDateTime;
 
 @Service
@@ -57,5 +58,10 @@ public class OutboxService {
         }
         log.info("Successfully reset {} FAILED outbox messages to PENDING for reprocessing", failedMessages.size());
         return failedMessages.size();
+    }
+
+    @Transactional(readOnly = true)
+    public List<OutboxMessage> getRecentOutboxMessages() {
+        return outboxRepository.findTop50ByOrderByIdDesc();
     }
 }

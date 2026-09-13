@@ -156,7 +156,13 @@ public class OrderServiceImpl implements OrderService {
 
     }
 
+    /**
+     * The {@code orderItems} association is LAZY and {@code spring.jpa.open-in-view} is
+     * disabled, so the read must happen inside a transaction — otherwise mapping the
+     * entity to a response fails with a LazyInitializationException (HTTP 500).
+     */
     @Override
+    @Transactional(readOnly = true)
     public OrderResponse getOrderById(Long id) {
 
         Order order = orderRepository.findById(id)
@@ -169,7 +175,11 @@ public class OrderServiceImpl implements OrderService {
 
     }
 
+    /**
+     * See {@link #getOrderById(Long)} — order history reads the same lazy item collection.
+     */
     @Override
+    @Transactional(readOnly = true)
     public List<OrderResponse> getOrdersByUserId(Long userId) {
 
         List<Order> orders = orderRepository.findByUserId(userId);

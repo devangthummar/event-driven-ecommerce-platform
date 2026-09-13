@@ -20,6 +20,7 @@ public class OrderMapper {
                 .toList();
 
         return OrderResponse.builder()
+                .id(order.getId())
                 .orderNumber(order.getOrderNumber())
                 .status(order.getStatus())
                 .totalAmount(order.getTotalAmount())

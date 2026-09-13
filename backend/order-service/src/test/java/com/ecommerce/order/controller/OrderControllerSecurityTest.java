@@ -139,7 +139,7 @@ class OrderControllerSecurityTest {
         authenticateAs(1L, "ROLE_USER");
         Order order = orderOwnedBy(1L);
         when(orderRepository.findById(1L)).thenReturn(Optional.of(order));
-        when(orderMapper.toOrderResponse(any())).thenReturn(
+        when(orderService.getOrderById(1L)).thenReturn(
                 new com.ecommerce.order.dto.response.OrderResponse());
 
         assertDoesNotThrow(() -> orderController.getOrderById(1L));
@@ -168,7 +168,7 @@ class OrderControllerSecurityTest {
         authenticateAs(1L, "ROLE_ADMIN");
         Order order = orderOwnedBy(2L);
         when(orderRepository.findById(2L)).thenReturn(Optional.of(order));
-        when(orderMapper.toOrderResponse(any())).thenReturn(
+        when(orderService.getOrderById(2L)).thenReturn(
                 new com.ecommerce.order.dto.response.OrderResponse());
 
         assertDoesNotThrow(() -> orderController.getOrderById(2L));

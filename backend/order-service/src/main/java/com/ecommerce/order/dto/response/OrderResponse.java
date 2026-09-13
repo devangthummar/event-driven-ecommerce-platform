@@ -14,6 +14,17 @@ import java.util.List;
 @Builder
 public class OrderResponse {
 
+    /**
+     * Database identifier of the order.
+     *
+     * <p>Exposed additively so clients can address an order resource for the
+     * endpoints that are keyed by id (GET /api/v1/orders/{id},
+     * PUT /api/v1/orders/{id}/status). Without it a client holding only the
+     * order list could not build those requests. No behaviour changes; the field
+     * is informational and no authorization decision reads it.
+     */
+    private Long id;
+
     private String orderNumber;
 
     private OrderStatus status;

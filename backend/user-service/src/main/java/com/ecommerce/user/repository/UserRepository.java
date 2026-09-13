@@ -11,4 +11,10 @@ public interface UserRepository extends JpaRepository<User, Long> {
 
     boolean existsByEmail(String email);
 
+    /**
+     * The {@code users.phone_number} column is also UNIQUE. Pre-checking it lets the
+     * client show a field-level conflict instead of a generic server error.
+     */
+    boolean existsByPhoneNumber(String phoneNumber);
+
 }

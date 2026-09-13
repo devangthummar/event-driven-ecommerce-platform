@@ -5,7 +5,6 @@ import com.ecommerce.order.dto.request.UpdateOrderStatusRequest;
 import com.ecommerce.order.dto.response.OrderResponse;
 import com.ecommerce.order.entity.Order;
 import com.ecommerce.order.exception.OrderNotFoundException;
-import com.ecommerce.order.mapper.OrderMapper;
 import com.ecommerce.order.repository.OrderRepository;
 import com.ecommerce.order.service.OrderService;
 import jakarta.validation.Valid;
@@ -27,7 +26,6 @@ public class OrderController {
 
     private final OrderService orderService;
     private final OrderRepository orderRepository;
-    private final OrderMapper orderMapper;
 
     /**
      * Extracts the authenticated user's ID from the JWT claims stored in the
@@ -82,8 +80,10 @@ public class OrderController {
                         "Order not found with id: " + id));
         enforceOwnership(order.getUserId());
 
+        // Delegate the read so the response is built inside the service's read-only
+        // transaction; mapping the entity outside one fails on the lazy item collection.
         return ResponseEntity.ok(
-                orderMapper.toOrderResponse(order));
+                orderService.getOrderById(id));
     }
 
     @GetMapping("/user/{userId}")
