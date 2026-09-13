@@ -103,7 +103,8 @@ services:
       test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:8006/actuator/health || exit 1"]
       interval: 10s
       timeout: 5s
-      retries: 5
+      retries: 10
+      start_period: 40s
 
   product-service:
     build:
@@ -133,7 +134,8 @@ services:
       test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:8081/actuator/health || exit 1"]
       interval: 10s
       timeout: 5s
-      retries: 5
+      retries: 10
+      start_period: 40s
 
   order-service:
     build:
@@ -163,7 +165,8 @@ services:
       test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:8082/actuator/health || exit 1"]
       interval: 10s
       timeout: 5s
-      retries: 5
+      retries: 10
+      start_period: 40s
 
   inventory-service:
     build:
@@ -192,7 +195,8 @@ services:
       test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:8084/actuator/health || exit 1"]
       interval: 10s
       timeout: 5s
-      retries: 5
+      retries: 10
+      start_period: 40s
 
   payment-service:
     build:
@@ -221,7 +225,8 @@ services:
       test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:8085/actuator/health || exit 1"]
       interval: 10s
       timeout: 5s
-      retries: 5
+      retries: 10
+      start_period: 40s
 
   notification-service:
     build:
@@ -243,7 +248,8 @@ services:
       test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:8086/actuator/health || exit 1"]
       interval: 10s
       timeout: 5s
-      retries: 5
+      retries: 10
+      start_period: 40s
 
   # ==========================================
   # Frontend Application (Nginx SPA + Reverse Proxy)
@@ -266,7 +272,10 @@ services:
     networks:
       - ecommerce-network
     healthcheck:
-      test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:80/ || exit 1"]
+      # Use 127.0.0.1 rather than localhost: the alpine image resolves
+      # localhost to ::1 first while nginx listens on IPv4 only, which made
+      # the container report unhealthy despite serving traffic fine.
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:80/ || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 5

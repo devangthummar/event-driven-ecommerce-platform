@@ -117,7 +117,8 @@ services:
       test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:8006/actuator/health || exit 1"]
       interval: 10s
       timeout: 5s
-      retries: 5
+      retries: 10
+      start_period: 40s
     restart: unless-stopped
 
   product-service:
@@ -146,7 +147,8 @@ services:
       test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:8081/actuator/health || exit 1"]
       interval: 10s
       timeout: 5s
-      retries: 5
+      retries: 10
+      start_period: 40s
     restart: unless-stopped
 
   order-service:
@@ -175,7 +177,8 @@ services:
       test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:8082/actuator/health || exit 1"]
       interval: 10s
       timeout: 5s
-      retries: 5
+      retries: 10
+      start_period: 40s
     restart: unless-stopped
 
   inventory-service:
@@ -203,7 +206,8 @@ services:
       test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:8084/actuator/health || exit 1"]
       interval: 10s
       timeout: 5s
-      retries: 5
+      retries: 10
+      start_period: 40s
     restart: unless-stopped
 
   payment-service:
@@ -231,7 +235,8 @@ services:
       test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:8085/actuator/health || exit 1"]
       interval: 10s
       timeout: 5s
-      retries: 5
+      retries: 10
+      start_period: 40s
     restart: unless-stopped
 
   notification-service:
@@ -252,7 +257,8 @@ services:
       test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:8086/actuator/health || exit 1"]
       interval: 10s
       timeout: 5s
-      retries: 5
+      retries: 10
+      start_period: 40s
     restart: unless-stopped
 
   # ============================================
@@ -279,7 +285,9 @@ services:
     networks:
       - ecommerce-network
     healthcheck:
-      test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:80/ || exit 1"]
+      # 127.0.0.1 (not localhost) — alpine resolves localhost to ::1 first
+      # while nginx listens on IPv4 only, which yields a false unhealthy state.
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:80/ || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 5
