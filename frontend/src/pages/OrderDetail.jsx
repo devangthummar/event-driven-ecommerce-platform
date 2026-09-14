@@ -1,4 +1,4 @@
-import { Link, useParams } from 'react'
+import { Link, useParams } from 'react-router-dom'
 import { getOrder } from '../api/orders'
 import Container from '../components/layout/Container'
 import OrderItemsList from '../components/order/OrderItemsList'
