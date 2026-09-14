@@ -1,234 +1,250 @@
 import { useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
-import { register as authRegister } from '../services/authService'
-import { normalizeError } from '../services/api/apiClient'
+import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom'
+import { register as registerRequest } from '../api/auth'
+import Container from '../components/layout/Container'
+import Alert from '../components/ui/Alert'
 import Button from '../components/ui/Button'
+import IconButton from '../components/ui/IconButton'
+import Input from '../components/ui/Input'
+import { EyeIcon } from '../components/ui/Icons'
+import { useAuth } from '../contexts/useAuth'
+import { useDocumentTitle } from '../hooks/useDocumentTitle'
+
+/* Mirrors RegisterRequest in the user service exactly, so the first error a
+   person sees comes from the same rules the server enforces. */
+const RULES = {
+  firstName: (value) =>
+    value.trim().length < 2 || value.trim().length > 50
+      ? 'First name must be between 2 and 50 characters.'
+      : null,
+  lastName: (value) =>
+    value.trim().length < 2 || value.trim().length > 50
+      ? 'Last name must be between 2 and 50 characters.'
+      : null,
+  email: (value) =>
+    /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim()) ? null : 'Enter a valid email address.',
+  password: (value) =>
+    value.length >= 8 ? null : 'Password must contain at least 8 characters.',
+  phoneNumber: (value) =>
+    /^[6-9]\d{9}$/.test(value.trim())
+      ? null
+      : 'Enter a valid 10-digit mobile number (starting with 6, 7, 8 or 9).',
+}
+
+const EMPTY_FORM = { firstName: '', lastName: '', email: '', password: '', phoneNumber: '' }
 
 function Register() {
+  const { isAuthenticated } = useAuth()
   const navigate = useNavigate()
+  const location = useLocation()
+  useDocumentTitle('Create an account')
 
-  const [form, setForm] = useState({
-    firstName: '',
-    lastName: '',
-    email: '',
-    password: '',
-    phoneNumber: '',
-  })
-  const [errors, setErrors] = useState({})
-  const [loading, setLoading] = useState(false)
-  const [success, setSuccess] = useState(false)
+  const from = location.state?.from || '/'
 
-  const handleChange = (e) => {
-    const { name, value } = e.target
-    setForm((prev) => ({ ...prev, [name]: value }))
-    // Clear field error when user starts typing
-    if (errors[name]) {
-      setErrors((prev) => {
-        const next = { ...prev }
-        delete next[name]
-        return next
-      })
-    }
+  const [form, setForm] = useState(EMPTY_FORM)
+  const [fieldErrors, setFieldErrors] = useState({})
+  const [formError, setFormError] = useState(null)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [showPassword, setShowPassword] = useState(false)
+
+  if (isAuthenticated) return <Navigate to={from} replace />
+
+  const handleChange = (event) => {
+    const { name, value } = event.target
+    setForm((previous) => ({ ...previous, [name]: value }))
+    setFieldErrors((previous) => ({ ...previous, [name]: undefined }))
+    setFormError(null)
   }
 
-  const handleSubmit = async (e) => {
-    e.preventDefault()
-    if (loading) return
-    setErrors({})
-    setLoading(true)
+  const handleBlur = (event) => {
+    const { name, value } = event.target
+    const rule = RULES[name]
+    if (!rule) return
+    const message = rule(value)
+    setFieldErrors((previous) => ({ ...previous, [name]: message || undefined }))
+  }
+
+  const handleSubmit = async (event) => {
+    event.preventDefault()
+    if (isSubmitting) return
+
+    const errors = {}
+    for (const [name, rule] of Object.entries(RULES)) {
+      const message = rule(form[name] ?? '')
+      if (message) errors[name] = message
+    }
+    setFieldErrors(errors)
+    if (Object.keys(errors).length > 0) return
+
+    setIsSubmitting(true)
+    setFormError(null)
 
     try {
-      await authRegister(form)
-      setSuccess(true)
-      // Redirect to login after a brief moment so user sees the success message
-      setTimeout(() => navigate('/login'), 1500)
-    } catch (err) {
-      const apiError = normalizeError(err)
+      await registerRequest({
+        firstName: form.firstName.trim(),
+        lastName: form.lastName.trim(),
+        email: form.email.trim(),
+        password: form.password,
+        phoneNumber: form.phoneNumber.trim(),
+      })
 
-      // Handle field-level validation errors (returned as { field: message } map)
-      if (apiError.fieldErrors) {
-        setErrors(apiError.fieldErrors)
-      } else {
-        setErrors({ _form: apiError.message })
-      }
+      navigate('/login', {
+        replace: true,
+        state: { email: form.email.trim(), justRegistered: true, from },
+      })
+    } catch (error) {
+      if (error?.fieldErrors) setFieldErrors(error.fieldErrors)
+      else if (error?.isConflict) {
+        // Both email and phone number are unique server-side; route the 409 to the
+        // field the backend actually complained about so the user can fix it in place.
+        const conflictMessage = String(error.message || '')
+        if (/phone/i.test(conflictMessage)) {
+          setFieldErrors({ phoneNumber: 'That phone number is already registered.' })
+        } else {
+          setFieldErrors({ email: 'An account with this email already exists.' })
+        }
+      } else setFormError(error)
     } finally {
-      setLoading(false)
+      setIsSubmitting(false)
     }
-  }
-
-  if (success) {
-    return (
-      <main className="py-12 lg:py-20">
-        <div className="max-w-md mx-auto px-6 lg:px-8 text-center">
-          <h1 className="text-3xl font-semibold text-primary tracking-tight mb-4">
-            Account created
-          </h1>
-          <p className="text-secondary">
-            Redirecting you to sign in…
-          </p>
-        </div>
-      </main>
-    )
   }
 
   return (
-    <main className="py-12 lg:py-20">
-      <div className="max-w-md mx-auto px-6 lg:px-8">
-        <div className="text-center mb-10">
-          <h1 className="text-3xl font-semibold text-primary tracking-tight mb-3">
-            Create an account
-          </h1>
-          <p className="text-secondary">
-            Join Aureum for a better shopping experience
+    <Container className="py-10 sm:py-14 lg:py-20">
+      <div className="mx-auto grid max-w-5xl gap-12 lg:grid-cols-2 lg:gap-20">
+        <div>
+          <p className="text-eyebrow mb-3">Join Aureum</p>
+          <h1 className="text-2xl font-semibold text-ink sm:text-3xl">Create your account</h1>
+          <p className="mt-2 text-sm text-ink-muted">
+            One account covers the catalog, your bag, your wallet and every order you place.
+          </p>
+
+          {formError && (
+            <Alert tone="danger" className="mt-6" title="We could not create your account">
+              {formError.message}
+            </Alert>
+          )}
+
+          <form onSubmit={handleSubmit} className="mt-6 space-y-5" noValidate>
+            <div className="grid gap-5 sm:grid-cols-2">
+              <Input
+                label="First name"
+                name="firstName"
+                autoComplete="given-name"
+                required
+                value={form.firstName}
+                error={fieldErrors.firstName}
+                onChange={handleChange}
+                onBlur={handleBlur}
+                placeholder="Aarav"
+              />
+              <Input
+                label="Last name"
+                name="lastName"
+                autoComplete="family-name"
+                required
+                value={form.lastName}
+                error={fieldErrors.lastName}
+                onChange={handleChange}
+                onBlur={handleBlur}
+                placeholder="Sharma"
+              />
+            </div>
+
+            <Input
+              label="Email"
+              name="email"
+              type="email"
+              autoComplete="email"
+              required
+              value={form.email}
+              error={fieldErrors.email}
+              onChange={handleChange}
+              onBlur={handleBlur}
+              placeholder="you@example.com"
+            />
+
+            <div className="relative">
+              <Input
+                label="Password"
+                name="password"
+                type={showPassword ? 'text' : 'password'}
+                autoComplete="new-password"
+                required
+                value={form.password}
+                error={fieldErrors.password}
+                hint={fieldErrors.password ? undefined : 'At least 8 characters.'}
+                onChange={handleChange}
+                onBlur={handleBlur}
+                placeholder="••••••••"
+              />
+              <IconButton
+                label={showPassword ? 'Hide password' : 'Show password'}
+                size="sm"
+                className="absolute right-2 top-[34px] text-ink-muted"
+                onClick={() => setShowPassword((value) => !value)}
+              >
+                <EyeIcon off={showPassword} className="size-4" />
+              </IconButton>
+            </div>
+
+            <Input
+              label="Mobile number"
+              name="phoneNumber"
+              type="tel"
+              inputMode="numeric"
+              autoComplete="tel-national"
+              required
+              maxLength={10}
+              value={form.phoneNumber}
+              error={fieldErrors.phoneNumber}
+              hint={fieldErrors.phoneNumber ? undefined : '10 digits, no country code.'}
+              onChange={handleChange}
+              onBlur={handleBlur}
+              placeholder="9876543210"
+            />
+
+            <Button
+              type="submit"
+              size="lg"
+              fullWidth
+              isLoading={isSubmitting}
+              loadingLabel="Creating account…"
+            >
+              Create account
+            </Button>
+          </form>
+
+          <p className="mt-6 text-sm text-ink-muted">
+            Already have an account?{' '}
+            <Link
+              to="/login"
+              state={{ from }}
+              className="press font-medium text-ink underline underline-offset-4 hover:text-ink-soft"
+            >
+              Sign in
+            </Link>
           </p>
         </div>
 
-        {errors._form && (
-          <div className="mb-6 p-4 bg-bg-secondary border border-border-light text-sm text-secondary text-center">
-            {errors._form}
+        <aside className="hidden lg:block">
+          <div className="rounded-2xl border border-line bg-canvas p-8">
+            <h2 className="text-sm font-semibold text-ink">What your account unlocks</h2>
+            <ul className="mt-4 space-y-3 text-sm text-ink-muted">
+              <li>• The full catalog with live pricing and availability.</li>
+              <li>• A bag that follows you between visits and tabs.</li>
+              <li>• A wallet used for checkout, with a transparent balance.</li>
+              <li>• Order history with the real status of every order.</li>
+            </ul>
+
+            <p className="mt-6 border-t border-line pt-4 text-xs leading-relaxed text-ink-faint">
+              Passwords are hashed by the user service and never stored by the storefront. Your
+              session is a signed token held in this browser only.
+            </p>
           </div>
-        )}
-
-        <form onSubmit={handleSubmit} className="space-y-6">
-          {/* First Name */}
-          <div>
-            <label htmlFor="firstName" className="block text-sm font-medium text-primary mb-2">
-              First name
-            </label>
-            <input
-              id="firstName"
-              name="firstName"
-              type="text"
-              required
-              minLength={2}
-              maxLength={50}
-              value={form.firstName}
-              onChange={handleChange}
-              aria-invalid={!!errors.firstName}
-              aria-describedby={errors.firstName ? 'firstName-error' : undefined}
-              className={`w-full px-4 py-3 bg-white border rounded-lg text-primary placeholder:text-muted focus:outline-none transition-colors duration-200 ${
-                errors.firstName ? 'border-red-400 focus:border-red-400' : 'border-border focus:border-primary'
-              }`}
-              placeholder="John"
-            />
-            {errors.firstName && (
-              <p id="firstName-error" className="mt-1 text-xs text-red-500">{errors.firstName}</p>
-            )}
-          </div>
-
-          {/* Last Name */}
-          <div>
-            <label htmlFor="lastName" className="block text-sm font-medium text-primary mb-2">
-              Last name
-            </label>
-            <input
-              id="lastName"
-              name="lastName"
-              type="text"
-              required
-              minLength={2}
-              maxLength={50}
-              value={form.lastName}
-              onChange={handleChange}
-              aria-invalid={!!errors.lastName}
-              aria-describedby={errors.lastName ? 'lastName-error' : undefined}
-              className={`w-full px-4 py-3 bg-white border rounded-lg text-primary placeholder:text-muted focus:outline-none transition-colors duration-200 ${
-                errors.lastName ? 'border-red-400 focus:border-red-400' : 'border-border focus:border-primary'
-              }`}
-              placeholder="Doe"
-            />
-            {errors.lastName && (
-              <p id="lastName-error" className="mt-1 text-xs text-red-500">{errors.lastName}</p>
-            )}
-          </div>
-
-          {/* Email */}
-          <div>
-            <label htmlFor="email" className="block text-sm font-medium text-primary mb-2">
-              Email
-            </label>
-            <input
-              id="email"
-              name="email"
-              type="email"
-              required
-              value={form.email}
-              onChange={handleChange}
-              aria-invalid={!!errors.email}
-              aria-describedby={errors.email ? 'email-error' : undefined}
-              className={`w-full px-4 py-3 bg-white border rounded-lg text-primary placeholder:text-muted focus:outline-none transition-colors duration-200 ${
-                errors.email ? 'border-red-400 focus:border-red-400' : 'border-border focus:border-primary'
-              }`}
-              placeholder="you@example.com"
-            />
-            {errors.email && (
-              <p id="email-error" className="mt-1 text-xs text-red-500">{errors.email}</p>
-            )}
-          </div>
-
-          {/* Password */}
-          <div>
-            <label htmlFor="password" className="block text-sm font-medium text-primary mb-2">
-              Password
-            </label>
-            <input
-              id="password"
-              name="password"
-              type="password"
-              required
-              minLength={8}
-              value={form.password}
-              onChange={handleChange}
-              aria-invalid={!!errors.password}
-              aria-describedby={errors.password ? 'password-error' : undefined}
-              className={`w-full px-4 py-3 bg-white border rounded-lg text-primary placeholder:text-muted focus:outline-none transition-colors duration-200 ${
-                errors.password ? 'border-red-400 focus:border-red-400' : 'border-border focus:border-primary'
-              }`}
-              placeholder="••••••••"
-            />
-            {errors.password && (
-              <p id="password-error" className="mt-1 text-xs text-red-500">{errors.password}</p>
-            )}
-          </div>
-
-          {/* Phone Number */}
-          <div>
-            <label htmlFor="phoneNumber" className="block text-sm font-medium text-primary mb-2">
-              Phone number
-            </label>
-            <input
-              id="phoneNumber"
-              name="phoneNumber"
-              type="tel"
-              required
-              pattern="^[6-9]\d{9}$"
-              value={form.phoneNumber}
-              onChange={handleChange}
-              aria-invalid={!!errors.phoneNumber}
-              aria-describedby={errors.phoneNumber ? 'phoneNumber-error' : undefined}
-              className={`w-full px-4 py-3 bg-white border rounded-lg text-primary placeholder:text-muted focus:outline-none transition-colors duration-200 ${
-                errors.phoneNumber ? 'border-red-400 focus:border-red-400' : 'border-border focus:border-primary'
-              }`}
-              placeholder="9876543210"
-            />
-            {errors.phoneNumber && (
-              <p id="phoneNumber-error" className="mt-1 text-xs text-red-500">{errors.phoneNumber}</p>
-            )}
-          </div>
-
-          <Button type="submit" className="w-full" disabled={loading}>
-            {loading ? 'Creating account…' : 'Create account'}
-          </Button>
-        </form>
-
-        <p className="mt-8 text-center text-sm text-secondary">
-          Already have an account?{' '}
-          <Link to="/login" className="text-primary hover:text-secondary underline underline-offset-4 transition-colors duration-200">
-            Sign in
-          </Link>
-        </p>
+        </aside>
       </div>
-    </main>
+    </Container>
   )
 }
 

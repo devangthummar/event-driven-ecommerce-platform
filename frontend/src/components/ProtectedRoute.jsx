@@ -1,35 +1,57 @@
-import { Navigate, useLocation } from 'react-router-dom'
+import { Link, Navigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../contexts/useAuth'
-import { LoadingState } from '../components/ui/LoadingState'
+import { hasAnyRole } from '../lib/roles'
+import RouteLoading from './common/RouteLoading'
+import { buttonClasses } from './ui/buttonStyles'
+import { ShieldIcon } from './ui/Icons'
 
 /**
- * ProtectedRoute — wraps routes that require authentication.
+ * ProtectedRoute — client-side gate for authenticated (and role-scoped) routes.
  *
- * Behavior:
- *   - Shows a loading state while auth is being validated on mount.
- *   - Redirects to /login with a return URL if not authenticated.
- *   - Optionally checks for specific roles.
- *
- * Usage:
- *   <Route path="/orders" element={<ProtectedRoute><Orders /></ProtectedRoute>} />
- *   <Route path="/admin/products" element={<ProtectedRoute roles={['ADMIN']}><AdminProducts /></ProtectedRoute>} />
+ * This is UX only: every request the guarded screens make is still authorized
+ * by the backend from the signed token, which is the actual authority. The
+ * role check here just avoids showing an interface that would only 403.
  */
 function ProtectedRoute({ children, roles = [] }) {
-  const { isAuthenticated, loading, user } = useAuth()
+  const { isAuthenticated, isBootstrapping, user } = useAuth()
   const location = useLocation()
 
-  if (loading) {
-    return <LoadingState message="Verifying access…" />
+  // Wait for the stored token to be verified before deciding.
+  if (isBootstrapping) {
+    return <RouteLoading label="Verifying your session…" />
   }
 
   if (!isAuthenticated) {
-    // Preserve the attempted URL so we can redirect back after login
-    return <Navigate to="/login" state={{ from: location.pathname }} replace />
+    return (
+      <Navigate
+        to="/login"
+        replace
+        state={{ from: `${location.pathname}${location.search}` }}
+      />
+    )
   }
 
-  // Role-based protection (for admin pages)
-  if (roles.length > 0 && !roles.includes(user?.role)) {
-    return <Navigate to="/" replace />
+  if (!hasAnyRole(user, roles)) {
+    return (
+      <div className="mx-auto flex max-w-lg flex-col items-center px-4 py-20 text-center">
+        <span className="mb-5 flex size-12 items-center justify-center rounded-full bg-canvas text-ink-muted">
+          <ShieldIcon className="size-5" />
+        </span>
+        <h1 className="text-2xl font-semibold text-ink">You do not have access to this area</h1>
+        <p className="mt-2 text-sm text-ink-muted">
+          This section requires a different account role. Your session is signed in as{' '}
+          <span className="font-medium text-ink">{user?.email}</span>.
+        </p>
+        <div className="mt-7 flex gap-3">
+          <Link to="/" className={buttonClasses({ variant: 'primary' })}>
+            Back to home
+          </Link>
+          <Link to="/products" className={buttonClasses({ variant: 'secondary' })}>
+            Browse products
+          </Link>
+        </div>
+      </div>
+    )
   }
 
   return children

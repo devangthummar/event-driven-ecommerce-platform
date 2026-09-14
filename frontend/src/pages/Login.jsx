@@ -1,113 +1,179 @@
 import { useState } from 'react'
-import { Link, useNavigate, useLocation } from 'react-router-dom'
-import { useAuth } from '../contexts/useAuth'
-import { login as authLogin } from '../services/authService'
-import { normalizeError } from '../services/api/apiClient'
+import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom'
+import { login as loginRequest } from '../api/auth'
+import Container from '../components/layout/Container'
+import Alert from '../components/ui/Alert'
 import Button from '../components/ui/Button'
+import IconButton from '../components/ui/IconButton'
+import Input from '../components/ui/Input'
+import { ArrowRightIcon, EyeIcon, ShieldIcon, TruckIcon, WalletIcon } from '../components/ui/Icons'
+import { useAuth } from '../contexts/useAuth'
+import { useDocumentTitle } from '../hooks/useDocumentTitle'
+
+const PANEL_POINTS = [
+  { icon: ShieldIcon, text: 'Sessions are signed tokens, verified on every request.' },
+  { icon: TruckIcon, text: 'Stock is reserved from live inventory when you order.' },
+  { icon: WalletIcon, text: 'Payments settle from your wallet through the payment service.' },
+]
 
 function Login() {
+  const { isAuthenticated, login } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
-  const { login } = useAuth()
+  useDocumentTitle('Sign in')
 
-  const [form, setForm] = useState({ email: '', password: '' })
-  const [error, setError] = useState(null)
-  const [loading, setLoading] = useState(false)
+  const from = location.state?.from || '/'
+  const justRegistered = location.state?.justRegistered
 
-  // Where to redirect after login (preserves return URL from ProtectedRoute)
-  const redirectTo = location.state?.from || '/'
+  const [form, setForm] = useState({
+    email: location.state?.email || '',
+    password: '',
+  })
+  const [fieldErrors, setFieldErrors] = useState({})
+  const [formError, setFormError] = useState(null)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [showPassword, setShowPassword] = useState(false)
 
-  const handleChange = (e) => {
-    const { name, value } = e.target
-    setForm((prev) => ({ ...prev, [name]: value }))
-    if (error) setError(null)
+  if (isAuthenticated) return <Navigate to={from} replace />
+
+  const handleChange = (event) => {
+    const { name, value } = event.target
+    setForm((previous) => ({ ...previous, [name]: value }))
+    setFieldErrors((previous) => ({ ...previous, [name]: undefined }))
+    setFormError(null)
   }
 
-  const handleSubmit = async (e) => {
-    e.preventDefault()
-    if (loading) return
-    setError(null)
-    setLoading(true)
+  const handleSubmit = async (event) => {
+    event.preventDefault()
+    if (isSubmitting) return
+
+    const errors = {}
+    if (!form.email.trim()) errors.email = 'Enter your email address.'
+    if (!form.password) errors.password = 'Enter your password.'
+    setFieldErrors(errors)
+    if (Object.keys(errors).length > 0) return
+
+    setIsSubmitting(true)
+    setFormError(null)
 
     try {
-      const { accessToken } = await authLogin({
-        email: form.email,
+      const { accessToken } = await loginRequest({
+        email: form.email.trim(),
         password: form.password,
       })
-      login(accessToken)
-      navigate(redirectTo, { replace: true })
-    } catch (err) {
-      const apiError = normalizeError(err)
-      setError(apiError.message)
+      // The provider stores the token and loads /api/users/me.
+      await login(accessToken)
+      navigate(from, { replace: true })
+    } catch (error) {
+      if (error?.fieldErrors) setFieldErrors(error.fieldErrors)
+      else setFormError(error)
     } finally {
-      setLoading(false)
+      setIsSubmitting(false)
     }
   }
 
   return (
-    <main className="py-12 lg:py-20">
-      <div className="max-w-md mx-auto px-6 lg:px-8">
-        <div className="text-center mb-10">
-          <h1 className="text-3xl font-semibold text-primary tracking-tight mb-3">
-            Welcome back
-          </h1>
-          <p className="text-secondary">
-            Sign in to your account
+    <Container className="py-10 sm:py-14 lg:py-20">
+      <div className="grid gap-12 lg:grid-cols-2 lg:gap-20">
+        <div className="mx-auto w-full max-w-md">
+          <p className="text-eyebrow mb-3">Welcome back</p>
+          <h1 className="text-2xl font-semibold text-ink sm:text-3xl">Sign in to Aureum</h1>
+          <p className="mt-2 text-sm text-ink-muted">
+            The catalog, your bag and your orders are all tied to your account.
+          </p>
+
+          {justRegistered && (
+            <Alert tone="success" className="mt-6" title="Account created">
+              Sign in with the password you just chose.
+            </Alert>
+          )}
+
+          {location.state?.from && (
+            <Alert tone="info" className="mt-6" title="Sign in to continue">
+              You were heading to a page that needs an account.
+            </Alert>
+          )}
+
+          {formError && (
+            <Alert tone="danger" className="mt-6" title="We could not sign you in">
+              {formError.message}
+            </Alert>
+          )}
+
+          <form onSubmit={handleSubmit} className="mt-6 space-y-5" noValidate>
+            <Input
+              label="Email"
+              name="email"
+              type="email"
+              autoComplete="email"
+              required
+              value={form.email}
+              error={fieldErrors.email}
+              onChange={handleChange}
+              placeholder="you@example.com"
+            />
+
+            <div className="relative">
+              <Input
+                label="Password"
+                name="password"
+                type={showPassword ? 'text' : 'password'}
+                autoComplete="current-password"
+                required
+                value={form.password}
+                error={fieldErrors.password}
+                onChange={handleChange}
+                placeholder="••••••••"
+              />
+              <IconButton
+                label={showPassword ? 'Hide password' : 'Show password'}
+                size="sm"
+                className="absolute right-2 top-[34px] text-ink-muted"
+                onClick={() => setShowPassword((value) => !value)}
+              >
+                <EyeIcon off={showPassword} className="size-4" />
+              </IconButton>
+            </div>
+
+            <Button type="submit" size="lg" fullWidth isLoading={isSubmitting} loadingLabel="Signing in…">
+              Sign in
+              <ArrowRightIcon className="size-4" />
+            </Button>
+          </form>
+
+          <p className="mt-6 text-sm text-ink-muted">
+            New to Aureum?{' '}
+            <Link
+              to="/register"
+              state={{ from }}
+              className="press font-medium text-ink underline underline-offset-4 hover:text-ink-soft"
+            >
+              Create an account
+            </Link>
           </p>
         </div>
 
-        {error && (
-          <div className="mb-6 p-4 bg-bg-secondary border border-border-light text-sm text-secondary text-center">
-            {error}
-          </div>
-        )}
-
-        <form onSubmit={handleSubmit} className="space-y-6">
+        <aside className="hidden rounded-2xl bg-ink p-10 text-white lg:flex lg:flex-col lg:justify-between">
           <div>
-            <label htmlFor="email" className="block text-sm font-medium text-primary mb-2">
-              Email
-            </label>
-            <input
-              id="email"
-              name="email"
-              type="email"
-              required
-              value={form.email}
-              onChange={handleChange}
-              className="w-full px-4 py-3 bg-white border border-border rounded-lg text-primary placeholder:text-muted focus:outline-none focus:border-primary transition-colors duration-200"
-              placeholder="you@example.com"
-            />
+            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-white/45">
+              Aureum
+            </p>
+            <p className="mt-4 text-2xl font-semibold leading-snug tracking-[-0.02em]">
+              Considered goods, backed by systems that behave.
+            </p>
           </div>
 
-          <div>
-            <label htmlFor="password" className="block text-sm font-medium text-primary mb-2">
-              Password
-            </label>
-            <input
-              id="password"
-              name="password"
-              type="password"
-              required
-              value={form.password}
-              onChange={handleChange}
-              className="w-full px-4 py-3 bg-white border border-border rounded-lg text-primary placeholder:text-muted focus:outline-none focus:border-primary transition-colors duration-200"
-              placeholder="••••••••"
-            />
-          </div>
-
-          <Button type="submit" className="w-full" disabled={loading}>
-            {loading ? 'Signing in…' : 'Sign in'}
-          </Button>
-        </form>
-
-        <p className="mt-8 text-center text-sm text-secondary">
-          Don&apos;t have an account?{' '}
-          <Link to="/register" className="text-primary hover:text-secondary underline underline-offset-4 transition-colors duration-200">
-            Create one
-          </Link>
-        </p>
+          <ul className="mt-12 space-y-4">
+            {PANEL_POINTS.map((point) => (
+              <li key={point.text} className="flex items-start gap-3 text-sm text-white/70">
+                <point.icon className="mt-0.5 size-4 shrink-0 text-white/50" />
+                {point.text}
+              </li>
+            ))}
+          </ul>
+        </aside>
       </div>
-    </main>
+    </Container>
   )
 }
 

@@ -1,16 +1,15 @@
 import { forwardRef } from 'react'
+import Spinner from './Spinner'
+import { buttonClasses } from './buttonStyles'
 
-const variants = {
-  primary: 'bg-primary text-white hover:bg-primary-light',
-  secondary: 'bg-transparent border border-primary text-primary hover:bg-primary hover:text-white',
-  text: 'bg-transparent text-primary hover:text-secondary',
-}
-
-const sizes = {
-  sm: 'px-4 py-2 text-sm',
-  md: 'px-6 py-3 text-base',
-  lg: 'px-8 py-4 text-base',
-}
+/* ==========================================================================
+   Button
+   --------------------------------------------------------------------------
+   One height scale (36 / 44 / 48px), one radius, one motion curve, so every
+   interactive control in the app has identical hit targets, focus rings and
+   disabled treatment. The class builder is shared with `<Link>` via
+   buttonStyles so a navigational action can look like a button.
+   ========================================================================== */
 
 const Button = forwardRef(function Button(
   {
@@ -18,26 +17,30 @@ const Button = forwardRef(function Button(
     variant = 'primary',
     size = 'md',
     className = '',
+    isLoading = false,
+    loadingLabel,
     disabled = false,
     type = 'button',
-    ...props
+    fullWidth = false,
+    ...rest
   },
-  ref
+  ref,
 ) {
-  const baseStyles = 'inline-flex items-center justify-center font-medium transition-all duration-200 ease-in-out rounded-[8px] cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed'
-
-  const variantStyles = variants[variant] || variants.primary
-  const sizeStyles = sizes[size] || sizes.md
-
   return (
     <button
       ref={ref}
       type={type}
-      disabled={disabled}
-      className={`${baseStyles} ${variantStyles} ${sizeStyles} ${className}`}
-      {...props}
+      disabled={disabled || isLoading}
+      aria-busy={isLoading || undefined}
+      className={buttonClasses({
+        variant,
+        size,
+        className: `${fullWidth ? 'w-full' : ''} ${className}`,
+      })}
+      {...rest}
     >
-      {children}
+      {isLoading && <Spinner className="size-3.5" />}
+      {isLoading && loadingLabel ? loadingLabel : children}
     </button>
   )
 })

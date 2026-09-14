@@ -1,102 +1,151 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
-  getToken,
-  setToken,
+  clearAuthStorage,
   getStoredUser,
-  setStoredUser,
-  clearAuth,
+  getToken,
   setOnUnauthorized,
-} from '../services/api/apiClient'
-import { getCurrentUser as fetchCurrentUser } from '../services/authService'
+  setStoredUser,
+  setToken,
+} from '../api/client'
+import { getCurrentUser } from '../api/auth'
+import { isAdmin as checkIsAdmin } from '../lib/roles'
 import AuthContext from './AuthContextObject'
 
-/**
- * AuthProvider — manages global authentication state.
- *
- * State shape:
- *   - user:     { id, firstName, lastName, email, phoneNumber, role } | null
- *   - token:    string | null
- *   - loading:  boolean (initial auth check in progress)
- *   - isAuthenticated: boolean
- *
- * On mount, checks for an existing JWT in localStorage and validates it
- * by calling GET /api/users/me. If invalid/expired, clears auth state.
- */
-export function AuthProvider({ children }) {
-  const [user, setUser] = useState(() => getStoredUser())
-  const [token, setTokenState] = useState(() => getToken())
-  const [loading, setLoading] = useState(true)
+/* ==========================================================================
+   AuthProvider
+   --------------------------------------------------------------------------
+   Session model (matches the backend exactly):
+     • the User Service issues a short-lived RS256 JWT on POST /api/users/login
+     • every other service verifies it against the public key
+     • the token carries `role` and `userId` claims; ownership checks read them
+     • there is no refresh endpoint in the contract, so an expired token simply
+       ends the session and the UI returns the person to sign-in
 
-  // Validate existing token on mount
+   The token is kept in localStorage (the backend stays the authority) and is
+   never rendered, logged, or placed in a URL.
+   ========================================================================== */
+
+export function AuthProvider({ children }) {
+  const [token, setTokenState] = useState(() => getToken())
+  const [user, setUser] = useState(() => getStoredUser())
+  // `isBootstrapping` guards protected routes until the stored token has been
+  // verified against /me at least once.
+  const [isBootstrapping, setIsBootstrapping] = useState(() => Boolean(getToken()))
+
+  const clearSession = useCallback(() => {
+    clearAuthStorage()
+    setTokenState(null)
+    setUser(null)
+  }, [])
+
+  // Verify a restored session once on mount.
   useEffect(() => {
     const existingToken = getToken()
     if (!existingToken) {
-      setLoading(false)
-      return
+      setIsBootstrapping(false)
+      return undefined
     }
 
-    fetchCurrentUser()
-      .then((userData) => {
-        setUser(userData)
+    let isActive = true
+    const controller = new AbortController()
+
+    getCurrentUser({ signal: controller.signal })
+      .then((profile) => {
+        if (!isActive) return
+        setUser(profile)
         setTokenState(existingToken)
-        setStoredUser(userData)
+        setStoredUser(profile)
       })
-      .catch(() => {
-        // Token is invalid or expired — clear everything
-        clearAuth()
-        setUser(null)
-        setTokenState(null)
+      .catch((error) => {
+        if (!isActive) return
+        if (error?.isUnauthorized || error?.isForbidden) {
+          clearSession()
+        } else {
+          // Transient failure (offline, service restart): keep the session if a
+          // cached identity exists rather than signing the person out.
+          const cached = getStoredUser()
+          if (cached) {
+            setUser(cached)
+            setTokenState(existingToken)
+          } else {
+            clearSession()
+          }
+        }
       })
       .finally(() => {
-        setLoading(false)
+        if (isActive) setIsBootstrapping(false)
       })
-  }, [])
 
-  // Register global 401 handler
+    return () => {
+      isActive = false
+      controller.abort()
+    }
+  }, [clearSession])
+
+  // Any 401 on an authenticated request means the token is no longer accepted.
   useEffect(() => {
     setOnUnauthorized(() => {
-      setUser(null)
       setTokenState(null)
-      clearAuth()
+      setUser(null)
     })
+    return () => setOnUnauthorized(null)
   }, [])
 
-  const login = useCallback((newToken, userData) => {
-    setToken(newToken)
-    setTokenState(newToken)
-    if (userData) {
-      setStoredUser(userData)
-      setUser(userData)
-    } else {
-      // Fetch user profile if not provided
-      fetchCurrentUser()
-        .then((fetchedUser) => {
-          setStoredUser(fetchedUser)
-          setUser(fetchedUser)
-        })
-        .catch(() => {
-          // Token was set but /me failed — clear auth
-          clearAuth()
-          setUser(null)
-          setTokenState(null)
-        })
+  /**
+   * Complete a sign-in.
+   * @param {string} accessToken raw JWT from POST /api/users/login
+   * @param {object} [profile] skip the /me round-trip when the profile is known
+   */
+  const login = useCallback(async (accessToken, profile) => {
+    setToken(accessToken)
+    setTokenState(accessToken)
+
+    if (profile) {
+      setStoredUser(profile)
+      setUser(profile)
+      return profile
+    }
+
+    try {
+      const fetched = await getCurrentUser()
+      setStoredUser(fetched)
+      setUser(fetched)
+      return fetched
+    } catch (error) {
+      // The token was rejected outright — do not leave a half-signed-in state.
+      clearAuthStorage()
+      setTokenState(null)
+      setUser(null)
+      throw error
     }
   }, [])
 
   const logout = useCallback(() => {
-    clearAuth()
-    setUser(null)
-    setTokenState(null)
+    clearSession()
+  }, [clearSession])
+
+  /** Refresh the cached profile (after a profile update, for example). */
+  const refreshUser = useCallback(async () => {
+    const fetched = await getCurrentUser()
+    setStoredUser(fetched)
+    setUser(fetched)
+    return fetched
   }, [])
 
-  const value = {
-    user,
-    token,
-    loading,
-    isAuthenticated: !!token && !!user,
-    login,
-    logout,
-  }
+  const value = useMemo(
+    () => ({
+      user,
+      token,
+      isBootstrapping,
+      loading: isBootstrapping,
+      isAuthenticated: Boolean(token && user),
+      isAdmin: checkIsAdmin(user),
+      login,
+      logout,
+      refreshUser,
+    }),
+    [user, token, isBootstrapping, login, logout, refreshUser],
+  )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }
